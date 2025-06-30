@@ -15,6 +15,30 @@ const fetchPokemon = async (id) => {
   }
 }
 
+const GEN_RANGES = {
+  1: {start: 1, end: 151},
+  2: {start: 152, end: 251},
+  3: {start: 252, end: 386},
+  4: {start: 387, end: 493},
+  5: {start: 494, end: 649},
+  6: {start: 650, end: 721},
+  7: {start: 722, end: 809},
+  8: {start: 810, end: 905},
+  9: {start: 906, end: 1025},
+};
+
+const getRandomIDs = (n, gen) => {
+  const {start, end} = GEN_RANGES[gen];
+  const uniqueIDs = new Set();
+
+  while (uniqueIDs.size < n) {
+    const randomID = Math.floor(Math.random() * (end - start + 1)) + start;
+    uniqueIDs.add(randomID);
+  }
+
+  return Array.from(uniqueIDs)
+}
+
 
 export default function GameScreen() {
   const router = useRouter();
@@ -39,7 +63,7 @@ export default function GameScreen() {
 
   const loadPokemon = async () => {
     try {
-      const pokemonIDList = [1, 4, 7, 10, 11]
+      const pokemonIDList = getRandomIDs(5, 1);//hardcoded 5 pokemon from gen 1
       const promises = pokemonIDList.map(id => fetchPokemon(id));
       const pokemons = await Promise.all(promises);
 
