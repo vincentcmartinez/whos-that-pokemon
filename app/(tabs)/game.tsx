@@ -1,5 +1,5 @@
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from "react";
+import { useCallback, useReducer, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 
@@ -39,6 +39,23 @@ const getRandomIDs = (n, gen) => {
   return Array.from(uniqueIDs)
 }
 
+const reducer = (state, action) => {
+  switch (action.type) {
+    case "nextPokemon":
+      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1};
+    case "revealSprite":
+      return {...state, spriteVisible: true};
+    case "hideSprite":
+      return {...state, spriteVisible: false};
+    case "toggleSprite":
+      return {...state, spriteVisible: !state.spriteVisible};
+    case "reset":
+      return {currentPokemonIndex: 0, spriteVisible: false};
+    default:
+      throw new Error();
+  }
+}
+
 
 export default function GameScreen() {
   const router = useRouter();
@@ -49,15 +66,15 @@ export default function GameScreen() {
     }, [])
   );
 
+  const [state, dispatch] = useReducer(reducer, {currentPokemonIndex: 0, spriteVisible: false});
+
   const [gamePokemons, setGamePokemons] = useState([]);
-  const [currentPokemonIndex, setCurrentPokemonIndex] = useState(0);
-  const [spriteVisible, setSpriteVisible] = useState(false)
+
 
 
   const resetGame = () => {
     setGamePokemons([]);
-    setCurrentPokemonIndex(0);
-    setSpriteVisible(false);
+    dispatch({type: "reset"});
     loadPokemon();
   }
 
@@ -75,10 +92,6 @@ export default function GameScreen() {
   }
 
   
-  
-  const toggleSpriteVisible = () => {
-    setSpriteVisible(visibility => !visibility);
-  }
 
   return (
     <View style={styles.container}>
@@ -87,8 +100,8 @@ export default function GameScreen() {
 
       
 
-      {gamePokemons[currentPokemonIndex]?.spriteURL && (<Image source = {{uri: gamePokemons[currentPokemonIndex].spriteURL}}
-        style = {spriteVisible ? styles.spriteRevealed : styles.spriteHidden} //filter
+      {gamePokemons[state.currentPokemonIndex]?.spriteURL && (<Image source = {{uri: gamePokemons[state.currentPokemonIndex].spriteURL}}
+        style = {state.spriteVisible ? styles.spriteRevealed : styles.spriteHidden} //filter
       />)}
 
       {/* 
@@ -97,11 +110,11 @@ export default function GameScreen() {
       
       */}
 
-      <Pressable onPress = {() => setCurrentPokemonIndex(currentPokemonIndex + 1)}> 
+      <Pressable onPress = {() => dispatch({type: "nextPokemon"})}> 
         <Text>Reload</Text>
       </Pressable>
 
-      <Pressable onPress = {() => toggleSpriteVisible()}>
+      <Pressable onPress = {() => dispatch({type: "toggleSprite"})}>
         <Text>Toggle</Text>
       </Pressable>
 
