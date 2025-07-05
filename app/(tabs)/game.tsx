@@ -1,6 +1,6 @@
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useReducer, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 
 const fetchPokemon = async (id) => {
@@ -49,8 +49,18 @@ const reducer = (state, action) => {
       return {...state, spriteVisible: false};
     case "toggleSprite":
       return {...state, spriteVisible: !state.spriteVisible};
+    case "loseLife":
+      return {...state, lifeNum: state.lifeNum - 1};
+    case "skipPokemon":
+      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1};
+    case "updateGuessText":
+      return {...state, guessText: action.payload}
+    case "correctGuess":
+      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, spriteVisible: false, roundNum: state.roundNum + 1, guessText: ""}
+    case "gameOver":
+      return {...state, modalVisible: true}
     case "reset":
-      return {currentPokemonIndex: 0, spriteVisible: false};
+      return {currentPokemonIndex: 0, spriteVisible: false, roundNum: 1, lifeNum: 5, guessText: "", modalVisible: false, score: 0, guessTime: 30};
     default:
       throw new Error();
   }
@@ -60,17 +70,15 @@ const reducer = (state, action) => {
 export default function GameScreen() {
   const router = useRouter();
 
-  useFocusEffect(
+  useFocusEffect(//game reset on focus
     useCallback(() => {
       resetGame();
     }, [])
   );
 
-  const [state, dispatch] = useReducer(reducer, {currentPokemonIndex: 0, spriteVisible: false});
+  const [state, dispatch] = useReducer(reducer, {currentPokemonIndex: 0, spriteVisible: false, roundNum: 1, lifeNum: 5, guessText: "", modalVisible: false, score: 0, guessTime: 0});
 
   const [gamePokemons, setGamePokemons] = useState([]);
-
-
 
   const resetGame = () => {
     setGamePokemons([]);
@@ -91,30 +99,73 @@ export default function GameScreen() {
     }
   }
 
-  
+  const handleGuessChange = (text) => {
+    dispatch({type: "updateGuessText", payload: text});
+
+    if (text === gamePokemons[state.currentPokemonIndex]?.name) {//correct
+      dispatch({type: "revealSprite"});
+
+      if (state.roundNum === 5) {//on final round
+        dispatch({type: "gameOver"});
+      }else{//more rounds
+        setTimeout(() => {//3 sec wait before advance/score/hide/cleartext
+          dispatch({type: "correctGuess"});
+        }, 3000);
+      }
+    }
+  }
+
+  const handleSkip = () => {
+    if (state.lifeNum === 1){//skipped or timedout on last life
+      dispatch({type: "gameOver"});
+    }else{//
+      dispatch({type: "skipPokemon"});
+    }
+  }
 
   return (
+    
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Game"}} />
-      <Text style={styles.title}>Guess the Pokémon!</Text>
+      <Modal visible = {state.modalVisible}>
+        <View>
+          <Text>Game Over !</Text>
+          <Text>Score: {state.score}</Text>
+          <Pressable onPress = {() => resetGame()}>
+            <Text>Play Again</Text>
+          </Pressable>
+          <Pressable onPress = {() => router.push("/")}>
+            <Text>Return Home</Text>
+          </Pressable>
+        </View>
+      </Modal>
 
-      
+      <Text style={styles.title}>Guess the Pokémon!</Text>
+      <Text>Round {state.roundNum}</Text>
+      <Text>Lives: {state.lifeNum}</Text>
+      <Text>Score: {state.score}</Text>
+      <Text>Time Remaining {state.score}</Text>
+      <Text>Pokemon: {gamePokemons[state.currentPokemonIndex]?.name}</Text> 
+      <Text>Current Text: {state.guessText}</Text> 
 
       {gamePokemons[state.currentPokemonIndex]?.spriteURL && (<Image source = {{uri: gamePokemons[state.currentPokemonIndex].spriteURL}}
-        style = {state.spriteVisible ? styles.spriteRevealed : styles.spriteHidden} //filter
+        style = {state.spriteVisible ? styles.spriteRevealed : styles.spriteHidden} 
       />)}
 
-      {/* 
-
-      // <TextInput placeholder="Your guess..." style={styles.input} />
+      <TextInput 
+        placeholder = "Your guess..." 
+        autoCorrect = {false}
+        value = {state.guessText}
+        onChangeText = {handleGuessChange}
+        //onSubmitEditing = {handleGuess} implment shake
+        style = {styles.input} 
+      />
       
-      */}
-
-      <Pressable onPress = {() => dispatch({type: "nextPokemon"})}> 
-        <Text>Reload</Text>
+      <Pressable onPress = {() => dispatch({type: "skipPokemon"})}> 
+        <Text>Skip Pokemon</Text>
       </Pressable>
 
-      <Pressable onPress = {() => dispatch({type: "toggleSprite"})}>
+      <Pressable onPress = {() => handleSkip()}>
         <Text>Toggle</Text>
       </Pressable>
 
@@ -127,7 +178,7 @@ export default function GameScreen() {
 } 
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  container: { flex: 1, justifyContent: 'space-around', alignItems: 'center', padding: 20 },
   title: { fontSize: 22, marginBottom: 20 },
   input: { width: '100%', borderColor: '#aaa', borderWidth: 1, padding: 10, borderRadius: 5 },
   spriteHidden: {width: 300, height: 300, tintColor: "black"},
