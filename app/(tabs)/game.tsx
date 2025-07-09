@@ -1,43 +1,11 @@
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useReducer } from "react";
 import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { usePokemon } from '../../hooks/usePokemon';
+import { useTimer } from '../../hooks/useTimer';
 
-const fetchPokemon = async (id) => {
-  try {
-    const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
-    const data = await response.json();
-    return {id, name: data.name, spriteURL: data.sprites.front_default};
-
-  } catch (error) {
-    console.error("fetch", error);
-    
-  }
-}
-
-const GEN_RANGES = {
-  1: {start: 1, end: 151},
-  2: {start: 152, end: 251},
-  3: {start: 252, end: 386},
-  4: {start: 387, end: 493},
-  5: {start: 494, end: 649},
-  6: {start: 650, end: 721},
-  7: {start: 722, end: 809},
-  8: {start: 810, end: 905},
-  9: {start: 906, end: 1025},
-};
-
-const getRandomIDs = (n, gen) => {
-  const {start, end} = GEN_RANGES[gen];
-  const uniqueIDs = new Set();
-
-  while (uniqueIDs.size < n) {
-    const randomID = Math.floor(Math.random() * (end - start + 1)) + start;
-    uniqueIDs.add(randomID);
-  }
-
-  return Array.from(uniqueIDs)
-}
+const GENS = [1];
 
 const reducer = (state, action) => {
   switch (action.type) {
@@ -52,23 +20,21 @@ const reducer = (state, action) => {
     case "loseLife":
       return {...state, lifeNum: state.lifeNum - 1};
     case "skipPokemon":
-      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1, guessTime: 30};
+      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1};
     case "updateGuessText":
       return {...state, guessText: action.payload}
     case "correctGuess":
       return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, spriteVisible: false, roundNum: state.roundNum + 1, guessText: ""}
     case "gameOver":
-      return {...state, modalVisible: true, timerActive: false}
-    case "timerTick":
-      return {...state, guessTime: state.guessTime - 1}
-    case "timerExpired":
-      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1, roundNum: state.roundNum + 1, guessTime: 30}
-    case "timerReset":
-      return {...state, guessTime: 30, timerActive: true}
-    case "timerPause":
-      return {...state, timerActive: false}
+      return {...state, modalVisible: true}
+    case "timerExpire":
+      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1, roundNum: state.roundNum + 1}
+    case "addScoreData":
+      return {...state, scoreData: [...state.scoreData, [state.currentPokemonIndex, action.payload]]}
+    case "addScore":
+      return {...state, score: state.score + action.payload}
     case "reset":
-      return {currentPokemonIndex: 0, spriteVisible: false, roundNum: 1, lifeNum: 5, guessText: "", modalVisible: false, score: 0, guessTime: 30, timerActive: true};
+      return {currentPokemonIndex: 0, spriteVisible: false, roundNum: 1, lifeNum: 5, guessText: "", modalVisible: false, score: 0, scoreData: []};
     default:
       throw new Error();
   }
@@ -77,6 +43,31 @@ const reducer = (state, action) => {
 
 export default function GameScreen() {
   const router = useRouter();
+  const {gamePokemon, loading, loadPokemon, clearPokemon} = usePokemon();
+
+  const handleTimerExpire = () => {
+    stopTimer();
+    if (state.lifeNum === 1 || state.roundNum === 5){
+      dispatch({type: "gameOver"});
+    }else{
+      dispatch({type: "timerExpire"});
+        resetTimer();
+        startTimer();
+    }
+  }
+
+  const {time, startTimer, stopTimer, resetTimer} = useTimer(30, handleTimerExpire);
+
+  const [state, dispatch] = useReducer(reducer, {
+    currentPokemonIndex: 0,
+    spriteVisible: false,
+    roundNum: 1,
+    lifeNum: 5,
+    guessText: "",
+    modalVisible: false,
+    score: 0,
+    scoreData: []}
+  );
 
   useFocusEffect(//game reset on focus
     useCallback(() => {
@@ -84,78 +75,53 @@ export default function GameScreen() {
     }, [])
   );
 
-  const [state, dispatch] = useReducer(reducer, {currentPokemonIndex: 0, spriteVisible: false, roundNum: 1, lifeNum: 5, guessText: "", modalVisible: false, score: 0, guessTime: 30, timerActive: true});
-
-  const [gamePokemons, setGamePokemons] = useState([]);
-
   const resetGame = () => {
-    setGamePokemons([]);
+    clearPokemon();
     dispatch({type: "reset"});
-    loadPokemon();
+    loadPokemon(9, GENS);
+    stopTimer();
+    resetTimer();
+    startTimer();
   }
 
-  const loadPokemon = async () => {
-    try {
-      const pokemonIDList = getRandomIDs(9, 1);//hardcoded 9 pokemon from gen 1 - 5 rounds + max of 4 skips
-      const promises = pokemonIDList.map(id => fetchPokemon(id));
-      const pokemons = await Promise.all(promises);
-
-      setGamePokemons(pokemons);
-
-    } catch (error) {
-      console.error("load", error);
+  const handleGuessChange = (text: string) => {
+    dispatch({type: "updateGuessText", payload: text});
+    if (text === gamePokemon[state.currentPokemonIndex]?.name) {//correct
+      handleCorrectGuess();
     }
   }
 
-  const handleGuessChange = (text) => {
-    dispatch({type: "updateGuessText", payload: text});
-
-    if (text === gamePokemons[state.currentPokemonIndex]?.name) {//correct
-      dispatch({type: "revealSprite"});
-
-      if (state.roundNum === 5) {//on final round
-        dispatch({type: "gameOver"});
-      }else{//more rounds
-        dispatch({type: "timerPause"});
-        setTimeout(() => {//3 sec wait before advance/score/hide/cleartext
-          dispatch({type: "correctGuess"});
-          dispatch({type: "timerReset"});
-        }, 3000);
-        
-      }
+  const handleCorrectGuess = () => {
+    stopTimer();
+    dispatch({type: "revealSprite"});
+    dispatch({type: "addScoreData", payload: time});
+    dispatch({type: "addScore", payload: time});
+    if (state.roundNum === 5) {//on final round
+      dispatch({type: "gameOver"});
+    }else{//more rounds
+      setTimeout(() => {//3 sec wait 
+        dispatch({type: "correctGuess"});
+        resetTimer();
+        startTimer();
+      }, 3000);
     }
   }
 
   const handleSkip = () => {
+    stopTimer();
     if (state.lifeNum === 1){//skipped or timedout on last life
       dispatch({type: "gameOver"});
     }else{//normal skip
       dispatch({type: "skipPokemon"});
+      resetTimer();
+      startTimer();
     }
   }
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (state.timerActive){
-        if (state.guessTime >= 1){
-          dispatch({type: "timerTick"});
-        }else{
-          if (state.lifeNum === 1){//timeout on last
-            dispatch({type: "gameOver"});
-          }else{
-            dispatch({type: "timerExpired"});
-          }
-        }
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [state.guessTime, state.timerActive, state.lifeNum]);
-
+  
   return (
-    
     <View style={styles.container}>
       <Stack.Screen options={{ title: "Game"}} />
-      <Modal visible = {state.modalVisible}>
+      <Modal style = {styles.modal} visible = {state.modalVisible}>
         <View>
           <Text>Game Over !</Text>
           <Text>Score: {state.score}</Text>
@@ -172,10 +138,10 @@ export default function GameScreen() {
       <Text>Round {state.roundNum}</Text>
       <Text>Lives: {state.lifeNum}</Text>
       <Text>Score: {state.score}</Text>
-      <Text>Pokemon: {gamePokemons[state.currentPokemonIndex]?.name}</Text> 
-      <Text>Time: {state.guessTime}</Text> 
+      <Text>Pokemon: {gamePokemon[state.currentPokemonIndex]?.name}</Text> 
+      <Text>Time: {time}</Text> 
 
-      {gamePokemons[state.currentPokemonIndex]?.spriteURL && (<Image source = {{uri: gamePokemons[state.currentPokemonIndex].spriteURL}}//add loading
+      {gamePokemon[state.currentPokemonIndex]?.spriteURL && (<Image source = {{uri: gamePokemon[state.currentPokemonIndex].spriteURL}}//add loading
         style = {state.spriteVisible ? styles.spriteRevealed : styles.spriteHidden} 
       />)}
 
@@ -202,6 +168,7 @@ export default function GameScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'space-around', alignItems: 'center', padding: 20 },
+  modal: {flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.6)',},
   title: { fontSize: 22, marginBottom: 20 },
   input: { width: '100%', borderColor: '#aaa', borderWidth: 1, padding: 10, borderRadius: 5 },
   spriteHidden: {width: 300, height: 300, tintColor: "black"},
