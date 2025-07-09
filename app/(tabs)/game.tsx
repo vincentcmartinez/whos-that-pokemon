@@ -1,5 +1,5 @@
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useReducer } from "react";
+import { useCallback, useReducer } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { usePokemon } from '../../hooks/usePokemon';
@@ -7,34 +7,62 @@ import { useTimer } from '../../hooks/useTimer';
 
 const GENS = [1];
 
+const ACTIONS = {
+  RESET: 'reset',
+  UPDATE_SCORE: 'updateScore',
+  UPDATE_GUESS_TEXT: 'updateGuessText',
+  REVEAL_SPRITE: 'revealSprite',
+  SKIP_POKEMON: 'skipPokemon',
+  TIMER_EXPIRE: 'timerExpire',
+  CORRECT_GUESS: 'correctGuess',
+  GAME_OVER: 'gameOver'
+}
+
 const reducer = (state, action) => {
   switch (action.type) {
-    case "nextPokemon":
-      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1};
-    case "revealSprite":
+    case 'updateGuessText':
+      return {...state, guessText: action.payload};
+    case 'updateScore'://fix
+      return {...state,
+        score: state.score + action.payload,
+        scoreData: [...state.scoreData, [state.currentPokemonIndex, action.payload]]
+      };
+    case 'revealSprite':
       return {...state, spriteVisible: true};
-    case "hideSprite":
-      return {...state, spriteVisible: false};
-    case "toggleSprite":
-      return {...state, spriteVisible: !state.spriteVisible};
-    case "loseLife":
-      return {...state, lifeNum: state.lifeNum - 1};
-    case "skipPokemon":
-      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1};
-    case "updateGuessText":
-      return {...state, guessText: action.payload}
-    case "correctGuess":
-      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, spriteVisible: false, roundNum: state.roundNum + 1, guessText: ""}
-    case "gameOver":
-      return {...state, modalVisible: true}
-    case "timerExpire":
-      return {...state, currentPokemonIndex: state.currentPokemonIndex + 1, lifeNum: state.lifeNum - 1, roundNum: state.roundNum + 1}
-    case "addScoreData":
-      return {...state, scoreData: [...state.scoreData, [state.currentPokemonIndex, action.payload]]}
-    case "addScore":
-      return {...state, score: state.score + action.payload}
-    case "reset":
-      return {currentPokemonIndex: 0, spriteVisible: false, roundNum: 1, lifeNum: 5, guessText: "", modalVisible: false, score: 0, scoreData: []};
+    case 'skipPokemon':
+      return {...state,
+        currentPokemonIndex: state.currentPokemonIndex + 1,
+        lifeNum: state.lifeNum - 1,
+        guessText: ""
+      };
+    case 'timerExpire':
+      return {...state,
+        currentPokemonIndex: state.currentPokemonIndex + 1,
+        roundNum: state.roundNum + 1,
+        lifeNum: state.lifeNum - 1,
+        guessText: ""
+      };
+    case 'correctGuess':
+      return {...state,
+        currentPokemonIndex: state.currentPokemonIndex + 1,
+        spriteVisible: false,
+        roundNum: state.roundNum + 1,
+        guessText: ""
+      };
+
+    case 'gameOver':
+      return {...state, modalVisible: true};
+    case 'reset':
+      return {
+        currentPokemonIndex: 0,
+        spriteVisible: false,
+        roundNum: 1,
+        lifeNum: 5,
+        guessText: "",
+        modalVisible: false,
+        score: 0,
+        scoreData: []
+      };
     default:
       throw new Error();
   }
@@ -48,9 +76,9 @@ export default function GameScreen() {
   const handleTimerExpire = () => {
     stopTimer();
     if (state.lifeNum === 1 || state.roundNum === 5){
-      dispatch({type: "gameOver"});
+      dispatch({type: ACTIONS.GAME_OVER});
     }else{
-      dispatch({type: "timerExpire"});
+      dispatch({type: ACTIONS.TIMER_EXPIRE});
         resetTimer();
         startTimer();
     }
@@ -77,7 +105,7 @@ export default function GameScreen() {
 
   const resetGame = () => {
     clearPokemon();
-    dispatch({type: "reset"});
+    dispatch({type: ACTIONS.RESET});
     loadPokemon(9, GENS);
     stopTimer();
     resetTimer();
@@ -85,22 +113,21 @@ export default function GameScreen() {
   }
 
   const handleGuessChange = (text: string) => {
-    dispatch({type: "updateGuessText", payload: text});
-    if (text === gamePokemon[state.currentPokemonIndex]?.name) {//correct
+    dispatch({type: ACTIONS.UPDATE_GUESS_TEXT, payload: text});
+    if (text.trim().toLowerCase() === gamePokemon[state.currentPokemonIndex]?.name.toLowerCase()) {//correct
       handleCorrectGuess();
     }
   }
 
   const handleCorrectGuess = () => {
     stopTimer();
-    dispatch({type: "revealSprite"});
-    dispatch({type: "addScoreData", payload: time});
-    dispatch({type: "addScore", payload: time});
+    dispatch({type: ACTIONS.REVEAL_SPRITE});
+    dispatch({type: ACTIONS.UPDATE_SCORE, payload: time});
     if (state.roundNum === 5) {//on final round
-      dispatch({type: "gameOver"});
+      dispatch({type: ACTIONS.GAME_OVER});
     }else{//more rounds
       setTimeout(() => {//3 sec wait 
-        dispatch({type: "correctGuess"});
+        dispatch({type: ACTIONS.CORRECT_GUESS});
         resetTimer();
         startTimer();
       }, 3000);
@@ -110,9 +137,9 @@ export default function GameScreen() {
   const handleSkip = () => {
     stopTimer();
     if (state.lifeNum === 1){//skipped or timedout on last life
-      dispatch({type: "gameOver"});
+      dispatch({type: ACTIONS.GAME_OVER});
     }else{//normal skip
-      dispatch({type: "skipPokemon"});
+      dispatch({type: ACTIONS.SKIP_POKEMON});
       resetTimer();
       startTimer();
     }
