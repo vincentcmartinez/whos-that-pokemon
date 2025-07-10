@@ -112,6 +112,22 @@ export default function HomeScreen() {
               </LinearGradient>
             </Pressable>
           </View>
+          <View style={styles.multiplayerButtonContainer}>
+            <Pressable 
+              style={({ pressed }) => [
+                styles.multiplayerButton,
+                pressed && styles.multiplayerButtonPressed
+              ]}
+              onPress={() => router.push('./multiplayer')}
+            >
+              <LinearGradient
+                colors={[ACCENT_GRADIENT[0], ACCENT_GRADIENT[1]] as [ColorValue, ColorValue]}
+                style={styles.multiplayerButtonGradient}
+              >
+                <Text style={[styles.multiplayerButtonText, {color: theme === 'light' ? '#eee' : '#222'}]}>Multiplayer</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
         </View>
         <View style={styles.bottomWarningContainer}>
           {networkStatus === 'offline' && (
@@ -297,6 +313,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   recordsButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  multiplayerButtonContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  multiplayerButton: {
+    width: width * 0.4,
+    height: 50,
+    borderRadius: 30,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  multiplayerButtonPressed: {
+    transform: [{ scale: 0.95 }],
+  },
+  multiplayerButtonGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  multiplayerButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
