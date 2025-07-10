@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const https = require('https');
 
 const app = express();
 const PORT = 3000;
@@ -54,43 +55,79 @@ const getRandomIDs = (n, gens) => {
 
 const fetchPokemon = async (id) => {
     console.log(`Fetching Pokemon ID: ${id}`);
-    try {
-        // Use a more robust fetch with proper headers
-        const url = `https://pokeapi.co/api/v2/pokemon/${id}`;
-        console.log(`Making request to: ${url}`);
-        
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'Pokemon-Game-Server/1.0',
-                'Accept': 'application/json'
-            },
-            timeout: 5000
-        });
-        
-        console.log(`Response status for Pokemon ${id}:`, response.status);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    return new Promise((resolve) => {
+        try {
+            const url = `https://pokeapi.co/api/v2/pokemon/${id}`;
+            console.log(`Making request to: ${url}`);
+            
+            const request = https.get(url, {
+                headers: {
+                    'User-Agent': 'Pokemon-Game-Server/1.0',
+                    'Accept': 'application/json'
+                },
+                timeout: 5000
+            }, (response) => {
+                console.log(`Response status for Pokemon ${id}:`, response.statusCode);
+                
+                if (response.statusCode !== 200) {
+                    console.error(`HTTP error for Pokemon ${id}: status ${response.statusCode}`);
+                    const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+                    const fallback = FALLBACK_POKEMON[fallbackIndex];
+                    console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+                    resolve(fallback);
+                    return;
+                }
+                
+                let data = '';
+                response.on('data', (chunk) => {
+                    data += chunk;
+                });
+                
+                response.on('end', () => {
+                    try {
+                        const pokemonData = JSON.parse(data);
+                        console.log(`Successfully fetched Pokemon ${id}: ${pokemonData.name}`);
+                        
+                        resolve({
+                            id, 
+                            name: pokemonData.name,
+                            spriteURL: pokemonData.sprites.front_default
+                        });
+                    } catch (parseError) {
+                        console.error(`JSON parse error for Pokemon ${id}:`, parseError.message);
+                        const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+                        const fallback = FALLBACK_POKEMON[fallbackIndex];
+                        console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+                        resolve(fallback);
+                    }
+                });
+            });
+            
+            request.on('error', (error) => {
+                console.error(`Fetch Error for Pokemon ID ${id}:`, error.message);
+                const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+                const fallback = FALLBACK_POKEMON[fallbackIndex];
+                console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+                resolve(fallback);
+            });
+            
+            request.on('timeout', () => {
+                console.error(`Timeout for Pokemon ID ${id}`);
+                request.destroy();
+                const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+                const fallback = FALLBACK_POKEMON[fallbackIndex];
+                console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+                resolve(fallback);
+            });
+            
+        } catch (error) {
+            console.error(`Unexpected error for Pokemon ID ${id}:`, error.message);
+            const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+            const fallback = FALLBACK_POKEMON[fallbackIndex];
+            console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+            resolve(fallback);
         }
-        
-        const data = await response.json();
-        console.log(`Successfully fetched Pokemon ${id}: ${data.name}`);
-        
-        return {
-            id, 
-            name: data.name,
-            spriteURL: data.sprites.front_default
-        };
-    } catch (error) {
-        console.error(`Fetch Error for Pokemon ID ${id}:`, error.message);
-        console.error(`Full error:`, error);
-        
-        // Return a fallback Pokémon if API fails
-        const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
-        const fallback = FALLBACK_POKEMON[fallbackIndex];
-        console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
-        return fallback;
-    }
+    });
 };
 const generatePartyCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -428,16 +465,21 @@ app.listen(PORT, '0.0.0.0', () => {
     
     // Test PokeAPI connectivity
     console.log('Testing PokeAPI connectivity...');
-    fetch('https://pokeapi.co/api/v2/pokemon/1')
-        .then(response => {
-            console.log('PokeAPI connectivity test - Status:', response.status);
-            if (response.ok) {
-                console.log('✅ PokeAPI is accessible');
-            } else {
-                console.log('❌ PokeAPI returned error status:', response.status);
-            }
-        })
-        .catch(error => {
-            console.log('❌ PokeAPI connectivity test failed:', error.message);
-        });
+    const testRequest = https.get('https://pokeapi.co/api/v2/pokemon/1', (response) => {
+        console.log('PokeAPI connectivity test - Status:', response.statusCode);
+        if (response.statusCode === 200) {
+            console.log('✅ PokeAPI is accessible');
+        } else {
+            console.log('❌ PokeAPI returned error status:', response.statusCode);
+        }
+    });
+    
+    testRequest.on('error', (error) => {
+        console.log('❌ PokeAPI connectivity test failed:', error.message);
+    });
+    
+    testRequest.on('timeout', () => {
+        console.log('❌ PokeAPI connectivity test timed out');
+        testRequest.destroy();
+    });
 }); 
