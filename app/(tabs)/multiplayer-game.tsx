@@ -96,7 +96,7 @@ export default function MultiplayerGameScreen() {
   const params = useLocalSearchParams();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const {gamePokemon, loading, error, loadPokemon, clearPokemon, setPokemonFromServer} = usePokemon();
-  const { party, updateScore, finishGame, endParty, isConnected, partyCode } = useMultiplayer();
+  const { party, updateScore, finishGame, endParty, leaveParty, isConnected, partyCode } = useMultiplayer();
 
   useEffect(() => {
     loadTheme();
@@ -269,6 +269,8 @@ export default function MultiplayerGameScreen() {
   };
 
   const handleReturnHome = () => {
+    // Clear multiplayer state when returning home
+    leaveParty();
     router.push('./');
   };
 

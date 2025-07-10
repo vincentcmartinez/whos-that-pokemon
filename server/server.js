@@ -328,11 +328,17 @@ app.post('/api/parties/:code/finish', (req, res) => {
             // Check for ties
             const tiedPlayers = sortedPlayers.filter(p => p.finalScore === winner.finalScore);
             
+            // Store game result in party
+            party.gameResult = {
+                winner: tiedPlayers.length > 1 ? null : winner,
+                tiedPlayers: tiedPlayers.length > 1 ? tiedPlayers : null
+            };
+            
             res.json({
                 players: party.players,
                 allFinished: true,
-                winner: tiedPlayers.length > 1 ? null : winner,
-                tiedPlayers: tiedPlayers.length > 1 ? tiedPlayers : null
+                winner: party.gameResult.winner,
+                tiedPlayers: party.gameResult.tiedPlayers
             });
         } else {
             res.json({
@@ -394,7 +400,8 @@ app.get('/api/parties/:code/status', (req, res) => {
         res.json({
             status: party.status,
             players: party.players,
-            gameStartTime: party.gameStartTime
+            gameStartTime: party.gameStartTime,
+            gameResult: party.gameResult || null
         });
     } catch (error) {
         console.error('Error getting party status:', error);

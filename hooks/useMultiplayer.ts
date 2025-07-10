@@ -87,7 +87,8 @@ export const useMultiplayer = () => {
                             status: data.status,
                             players: data.players,
                             pokemonList: prev.party?.pokemonList || [],
-                            gameStartTime: data.gameStartTime
+                            gameStartTime: data.gameStartTime,
+                            gameResult: data.gameResult || null
                         }
                     }));
                 }
@@ -352,7 +353,7 @@ export const useMultiplayer = () => {
             const data = await response.json();
             
             stopPolling();
-            setState({
+            const clearedState = {
                 partyCode: null,
                 playerId: null,
                 party: null,
@@ -360,7 +361,10 @@ export const useMultiplayer = () => {
                 isConnected: false,
                 error: null,
                 loading: false
-            });
+            };
+            setState(clearedState);
+            // Also clear global state
+            globalState = clearedState;
 
             return data;
         } catch (error) {
@@ -374,7 +378,7 @@ export const useMultiplayer = () => {
 
     const leaveParty = useCallback(() => {
         stopPolling();
-        setState({
+        const clearedState = {
             partyCode: null,
             playerId: null,
             party: null,
@@ -382,7 +386,10 @@ export const useMultiplayer = () => {
             isConnected: false,
             error: null,
             loading: false
-        });
+        };
+        setState(clearedState);
+        // Also clear global state
+        globalState = clearedState;
     }, [stopPolling]);
 
     const clearError = useCallback(() => {
