@@ -1,10 +1,15 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 export const useTimer = (duration=30, onExpire?: () => void) => {
     const [time, setTime] = useState(duration);
-    const intervalRef = useRef(0);
+    const intervalRef = useRef<number | null>(null);
 
     const startTimer = () => {
+        // Clear any existing interval first
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+        }
+        
         intervalRef.current = setInterval(() => {
             setTime((prev) => {
                 if (prev <= 1){
@@ -18,13 +23,24 @@ export const useTimer = (duration=30, onExpire?: () => void) => {
     }
 
     const stopTimer = () => {
-        clearInterval(intervalRef.current);
-        intervalRef.current = 0;
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
     }
 
     const resetTimer = () => {
         setTime(duration);
     }
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, []);
 
     return{
         time,
