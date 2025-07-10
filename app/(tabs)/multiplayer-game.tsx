@@ -58,12 +58,17 @@ const reducer = (state:any, action:any) => {
       }
       return newStateTimer;
     case 'correctGuess':
-      return {...state,
+      const newStateCorrect = {...state,
         currentPokemonIndex: state.currentPokemonIndex + 1,
         spriteVisible: false,
         roundNum: state.roundNum + 1,
         guessText: ""
       };
+      // Check for game over after state update
+      if (newStateCorrect.roundNum >= 5) {
+        return {...newStateCorrect, modalVisible: true};
+      }
+      return newStateCorrect;
     case 'gameOver':
       return {...state, modalVisible: true};
     case 'reset':
@@ -85,14 +90,13 @@ const reducer = (state:any, action:any) => {
 const LIGHT_GRADIENT: ColorValue[] = ['#9191E9', '#f9fbf2'];
 const DARK_GRADIENT: ColorValue[] = ['#2f3061', '#1b180e'];
 const ACCENT_GRADIENT: ColorValue[] = ['#C2AFF0', '#9191E9'];
-const CARD_COLOR = ACCENT_GRADIENT[1];
 
 export default function MultiplayerGameScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const {gamePokemon, loading, error, loadPokemon, clearPokemon, setPokemonFromServer} = usePokemon();
-  const { party, updateScore, endParty } = useMultiplayer();
+  const { party, updateScore, finishGame, endParty, isConnected, partyCode } = useMultiplayer();
 
   useEffect(() => {
     loadTheme();
@@ -151,20 +155,22 @@ export default function MultiplayerGameScreen() {
 
   const [betweenRounds, setBetweenRounds] = useState(false);
   const [countdown, setCountdown] = useState(3);
+  const [gameFinished, setGameFinished] = useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   // Update score to server and save locally when game ends
   useEffect(() => {
-    if (state.modalVisible) {
-      // Update score to server
+    if (state.modalVisible && !gameFinished) {
+      setGameFinished(true);
+      // Finish game on server
       if (party) {
-        updateScore(state.score, state.lifeNum, state.roundNum).catch(console.error);
+        finishGame(state.score, state.lifeNum, state.roundNum).catch(console.error);
       }
       
       // Save score locally
       saveScore(state.score, state.lifeNum, state.roundNum);
     }
-  }, [state.modalVisible, party, updateScore]);
+  }, [state.modalVisible, party, finishGame, gameFinished]);
 
   const startShake = () => {
     Animated.sequence([
@@ -186,16 +192,17 @@ export default function MultiplayerGameScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (party?.pokemonList && party.pokemonList.length > 0) {
-        // Use Pokémon list from server
+      if (party?.pokemonList && party.pokemonList.length > 0 && gamePokemon.length === 0) {
+        // Use Pokémon list from server only if we don't have Pokemon loaded
+        console.log('Loading Pokemon from server:', party.pokemonList.length);
         setPokemonFromServer(party.pokemonList);
         resetGame();
       }
-    }, [party, setPokemonFromServer])
+    }, [party, setPokemonFromServer, gamePokemon.length])
   );
 
   const resetGame = () => {
-    if (!party?.pokemonList) {
+    if (!party?.pokemonList && gamePokemon.length === 0) {
       clearPokemon();
       loadPokemon(9, GENS);
     }
@@ -265,6 +272,18 @@ export default function MultiplayerGameScreen() {
     router.push('./');
   };
 
+  // Debug logging
+  console.log('MultiplayerGameScreen state:', { 
+    hasParty: !!party, 
+    isConnected, 
+    partyCode, 
+    partyStatus: party?.status,
+    pokemonCount: party?.pokemonList?.length,
+    gamePokemonCount: gamePokemon.length,
+    currentPokemonIndex: state.currentPokemonIndex,
+    currentPokemon: gamePokemon[state.currentPokemonIndex]?.name
+  });
+
   if (!party) {
     return (
       <LinearGradient
@@ -333,6 +352,8 @@ export default function MultiplayerGameScreen() {
   }
 
   const currentPokemon = gamePokemon[state.currentPokemonIndex];
+  const allPlayersFinished = party?.players?.every((p: any) => p.finished);
+  const gameResult = party?.gameResult;
 
   return (
     <LinearGradient
@@ -346,143 +367,170 @@ export default function MultiplayerGameScreen() {
         headerTransparent: true,
         headerBackVisible: false,
       }} />
-
+      
       <KeyboardAvoidingView 
-        style={styles.container} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        style={[styles.keyboardAvoidingView, { paddingTop: 40 }]}
       >
-        <View style={styles.header}>
-          <View style={styles.scoreContainer}>
-            <Text style={[styles.scoreText, { color: theme === 'light' ? '#222' : '#fff' }]}>
-              Score: {state.score}
-            </Text>
-            <Text style={[styles.livesText, { color: theme === 'light' ? '#222' : '#fff' }]}>
-              Lives: {state.lifeNum}
-            </Text>
-          </View>
-          <View style={styles.timerContainer}>
-            <Text style={[styles.timerText, { color: theme === 'light' ? '#222' : '#fff' }]}>
-              {time}s
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.gameContainer}>
-          <View style={styles.pokemonContainer}>
-            <View style={[styles.pokemonCard, { backgroundColor: CARD_COLOR }]}>
-              {currentPokemon && (
-                <Image
-                  source={{ uri: currentPokemon.spriteURL }}
-                  style={[
-                    styles.pokemonSprite,
-                    state.spriteVisible ? styles.visibleSprite : styles.hiddenSprite
-                  ]}
-                />
-              )}
-            </View>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={[
-                styles.guessInput,
-                { 
-                  backgroundColor: theme === 'dark' ? '#333' : '#f0f0f0',
-                  color: theme === 'light' ? '#222' : '#fff',
-                  borderColor: theme === 'dark' ? '#555' : '#ddd'
-                }
-              ]}
-              placeholder="Enter Pokémon name..."
-              placeholderTextColor={theme === 'dark' ? '#aaa' : '#666'}
-              value={state.guessText}
-              onChangeText={handleGuessChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!betweenRounds}
-            />
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Pressable
-              style={styles.skipButton}
-              onPress={handleSkip}
-              disabled={betweenRounds}
-            >
-              <LinearGradient
-                colors={ACCENT_GRADIENT as [ColorValue, ColorValue]}
-                style={styles.skipButtonGradient}
-              >
-                <Text style={styles.skipButtonText}>Skip</Text>
-              </LinearGradient>
-            </Pressable>
-          </View>
-        </View>
-
-        {betweenRounds && (
-          <View style={styles.countdownContainer}>
-            <Animated.View
-              style={[
-                styles.countdownBox,
-                {
-                  transform: [{
-                    translateX: shakeAnim.interpolate({
-                      inputRange: [-1, 1],
-                      outputRange: [-10, 10]
-                    })
-                  }]
-                }
-              ]}
-            >
-              <Text style={[styles.countdownText, { color: theme === 'light' ? '#222' : '#fff' }]}>
-                {countdown}
-              </Text>
-            </Animated.View>
-          </View>
-        )}
-
-        <Modal
+        <Modal 
           visible={state.modalVisible}
           transparent={true}
           animationType="fade"
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: theme === 'dark' ? '#333' : '#fff' }]}>
-              <Text style={[styles.modalTitle, { color: theme === 'light' ? '#222' : '#fff' }]}>
-                Game Over!
-              </Text>
-              <Text style={[styles.modalScore, { color: theme === 'light' ? '#222' : '#fff' }]}>
-                Final Score: {state.score}
-              </Text>
-              <Text style={[styles.modalLives, { color: theme === 'light' ? '#222' : '#fff' }]}>
-                Lives Remaining: {state.lifeNum}
-              </Text>
-              <Text style={[styles.modalRounds, { color: theme === 'light' ? '#222' : '#fff' }]}>
-                Rounds Completed: {state.roundNum}
-              </Text>
-              
-              <View style={styles.modalButtons}>
-                <Pressable
-                  style={styles.modalButton}
-                  onPress={handleGameOver}
-                >
-                  <LinearGradient
-                    colors={ACCENT_GRADIENT as [ColorValue, ColorValue]}
-                    style={styles.modalButtonGradient}
-                  >
-                    <Text style={styles.modalButtonText}>End Game</Text>
-                  </LinearGradient>
-                </Pressable>
-              </View>
+            <View style={styles.modalContent}>
+              <LinearGradient
+                colors={ACCENT_GRADIENT as [ColorValue, ColorValue]}
+                style={styles.modalGradient}
+              >
+                <Text style={styles.modalTitle}>Game Over!</Text>
+                <Text style={styles.modalScore}>Final Score: {state.score}</Text>
+                
+                {!allPlayersFinished ? (
+                  <Text style={styles.waitingText}>Waiting for all players to finish...</Text>
+                ) : gameResult ? (
+                  <View style={styles.winnerContainer}>
+                    {gameResult.winner ? (
+                      <Text style={styles.winnerText}>Winner: {gameResult.winner.name} ({gameResult.winner.finalScore} points)</Text>
+                    ) : gameResult.tiedPlayers ? (
+                      <View>
+                        <Text style={styles.winnerText}>It's a tie!</Text>
+                        {gameResult.tiedPlayers.map((player: any, index: number) => (
+                          <Text key={index} style={styles.tieText}>{player.name} ({player.finalScore} points)</Text>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+                
+                <View style={styles.modalButtons}>
+                  {allPlayersFinished ? (
+                    <Pressable 
+                      style={({ pressed }) => [
+                        styles.modalButton,
+                        pressed && styles.modalButtonPressed
+                      ]}
+                      onPress={handleReturnHome}
+                    >
+                      <Text style={styles.modalButtonText}>Return Home</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable 
+                      style={({ pressed }) => [
+                        styles.modalButton,
+                        pressed && styles.modalButtonPressed
+                      ]}
+                      onPress={handleReturnHome}
+                    >
+                      <Text style={styles.modalButtonText}>Return Home</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </LinearGradient>
             </View>
           </View>
         </Modal>
+
+        {!loading && gamePokemon.length > 0 && (
+          <>
+            <View style={styles.gameInfoContainer}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Round</Text>
+                  <Text style={styles.infoValue}>{state.roundNum}/5</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Lives</Text>
+                  <Text style={styles.infoValue}>{state.lifeNum}</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Score</Text>
+                  <Text style={styles.infoValue}>{state.score}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.timerContainer}>
+                <Text style={styles.timerLabel}>Time Left</Text>
+                <Text style={styles.timerValue}>{time}s</Text>
+              </View>
+            </View>
+
+            <View style={styles.cardContainer}>
+              <View style={styles.pokemonCard}>
+                {currentPokemon && (
+                  <Animated.Image
+                    source={{ uri: currentPokemon.spriteURL }}
+                    style={[
+                      state.spriteVisible ? styles.spriteRevealed : styles.pokemonImage,
+                      betweenRounds && {
+                        transform: [{ translateX: shakeAnim.interpolate({
+                          inputRange: [-1, 1],
+                          outputRange: [-10, 10],
+                        }) }],
+                      },
+                    ]}
+                    resizeMode="contain"
+                  />
+                )}
+                {betweenRounds && (
+                  <View style={styles.countdownOverlay}>
+                    <Text style={styles.countdownText}>{countdown > 0 ? countdown : ''}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <TextInput 
+                placeholder="Type your guess..." 
+                placeholderTextColor="rgba(128, 112, 136, 0.78)"
+                autoCorrect={false}
+                value={state.guessText}
+                onChangeText={handleGuessChange}
+                editable={!betweenRounds}
+                style={styles.input} 
+                onSubmitEditing={() => {
+                  const guess = state.guessText.trim().toLowerCase();
+                  const answer = currentPokemon?.name.toLowerCase();
+                  if (guess === answer) {
+                    handleCorrectGuess();
+                  } else if (guess.length > 0 && !betweenRounds) {
+                    // Subtract a life and clear input
+                    if (state.lifeNum === 1) {
+                      dispatch({type: ACTIONS.GAME_OVER});
+                    } else {
+                      dispatch({type: ACTIONS.SKIP_POKEMON});
+                    }
+                  }
+                }}
+              />
+              
+              <View style={styles.buttonRow}>
+                <Pressable 
+                  style={({ pressed }) => [
+                    styles.skipButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={handleSkip}
+                  disabled={betweenRounds}
+                >
+                  <Text style={styles.skipButtonText}>Skip</Text>
+                </Pressable>
+              </View>
+            </View>
+          </>
+        )}
       </KeyboardAvoidingView>
     </LinearGradient>
   );
-}
+} 
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  keyboardAvoidingView: {
     flex: 1,
   },
   centerContainer: {
@@ -500,98 +548,79 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+  gameInfoContainer: {
     paddingTop: 60,
+    paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  scoreContainer: {
-    alignItems: 'flex-start',
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
   },
-  scoreText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
+  infoItem: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 15,
+    minWidth: 80,
   },
-  livesText: {
-    fontSize: 16,
+  infoLabel: {
+    fontSize: 12,
+    color: '#fff',
+    opacity: 0.8,
     fontWeight: '500',
+  },
+  infoValue: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: 'bold',
+    marginTop: 2,
   },
   timerContainer: {
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 10,
+    borderRadius: 15,
   },
-  timerText: {
+  timerLabel: {
+    fontSize: 14,
+    color: '#fff',
+    opacity: 0.9,
+  },
+  timerValue: {
     fontSize: 24,
+    color: '#fff',
     fontWeight: 'bold',
+    marginTop: 2,
   },
-  gameContainer: {
+  cardContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  pokemonContainer: {
-    marginBottom: 40,
-  },
   pokemonCard: {
-    width: 200,
-    height: 200,
+    width: width * 0.7,
+    height: width * 0.7,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    position: 'relative',
   },
-  pokemonSprite: {
-    width: 150,
-    height: 150,
-    resizeMode: 'contain',
+  pokemonImage: {
+    width: width * 0.7,
+    height: width * 0.7,
+    tintColor: "black",
+    opacity: 0.3,
   },
-  visibleSprite: {
-    opacity: 1,
+  spriteRevealed: {
+    width: width * 0.7,
+    height: width * 0.7,
   },
-  hiddenSprite: {
-    opacity: 0.1,
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 30,
-  },
-  guessInput: {
-    height: 50,
-    borderWidth: 1,
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  buttonContainer: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  skipButton: {
-    width: 120,
-    height: 50,
-    borderRadius: 25,
-    overflow: 'hidden',
-  },
-  skipButtonGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  countdownContainer: {
+  countdownOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -600,18 +629,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  countdownBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 20,
   },
   countdownText: {
     fontSize: 48,
+    color: '#fff',
     fontWeight: 'bold',
+  },
+  inputContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+  },
+  input: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    fontSize: 18,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 15,
+  },
+  skipButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
   modalOverlay: {
     flex: 1,
@@ -620,54 +679,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    padding: 30,
+    width: '80%',
     borderRadius: 20,
+    overflow: 'hidden',
+  },
+  modalGradient: {
+    padding: 30,
     alignItems: 'center',
-    minWidth: 300,
   },
   modalTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  modalScore: {
-    fontSize: 20,
+    color: '#fff',
     fontWeight: 'bold',
     marginBottom: 10,
   },
-  modalLives: {
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  modalRounds: {
-    fontSize: 16,
+  modalScore: {
+    fontSize: 18,
+    color: '#fff',
     marginBottom: 20,
+  },
+  waitingText: {
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  winnerContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  winnerText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  tieText: {
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+    marginTop: 5,
   },
   modalButtons: {
     flexDirection: 'row',
     gap: 15,
   },
   modalButton: {
-    borderRadius: 25,
-    overflow: 'hidden',
-  },
-  modalButtonGradient: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 15,
   },
   modalButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
+  modalButtonPressed: {
+    opacity: 0.7,
+  },
   button: {
-    borderRadius: 25,
+    borderRadius: 15,
     overflow: 'hidden',
-    marginTop: 20,
   },
   buttonGradient: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
   buttonText: {
     color: '#fff',

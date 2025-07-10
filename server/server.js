@@ -293,6 +293,59 @@ app.post('/api/parties/:code/score', (req, res) => {
     }
 });
 
+app.post('/api/parties/:code/finish', (req, res) => {
+    try {
+        const { code } = req.params;
+        const { playerId, finalScore, livesRemaining, roundsCompleted } = req.body;
+
+        const party = parties.get(code);
+        
+        if (!party) {
+            return res.status(404).json({ error: 'Party not found' });
+        }
+
+        const player = party.players.find(p => p.id === playerId);
+        if (!player) {
+            return res.status(404).json({ error: 'Player not found' });
+        }
+
+        // Mark player as finished
+        player.finished = true;
+        player.finalScore = finalScore;
+        player.livesRemaining = livesRemaining;
+        player.roundsCompleted = roundsCompleted;
+
+        console.log(`Player ${player.name} finished with score: ${finalScore}`);
+
+        // Check if all players have finished
+        const allPlayersFinished = party.players.every(p => p.finished);
+        
+        if (allPlayersFinished) {
+            // Determine winner
+            const sortedPlayers = [...party.players].sort((a, b) => b.finalScore - a.finalScore);
+            const winner = sortedPlayers[0];
+            
+            // Check for ties
+            const tiedPlayers = sortedPlayers.filter(p => p.finalScore === winner.finalScore);
+            
+            res.json({
+                players: party.players,
+                allFinished: true,
+                winner: tiedPlayers.length > 1 ? null : winner,
+                tiedPlayers: tiedPlayers.length > 1 ? tiedPlayers : null
+            });
+        } else {
+            res.json({
+                players: party.players,
+                allFinished: false
+            });
+        }
+    } catch (error) {
+        console.error('Error finishing game:', error);
+        res.status(500).json({ error: 'Failed to finish game' });
+    }
+});
+
 app.delete('/api/parties/:code', (req, res) => {
     try {
         const { code } = req.params;

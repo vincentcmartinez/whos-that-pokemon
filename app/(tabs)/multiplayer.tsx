@@ -44,10 +44,12 @@ export default function MultiplayerScreen() {
 
   // Auto-navigate to game screen when game starts
   useEffect(() => {
+    console.log('Party status changed:', party?.status, 'isConnected:', isConnected);
     if (party?.status === 'playing') {
+      console.log('Navigating to multiplayer game');
       router.push('./multiplayer-game');
     }
-  }, [party?.status, router]);
+  }, [party?.status, router, isConnected]);
 
   const handleCreateParty = async () => {
     if (!playerName.trim()) {

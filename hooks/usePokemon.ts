@@ -106,11 +106,22 @@ export const usePokemon = () => {
         setError(null);
     }, []);
 
+    const setPokemonFromServer = useCallback((pokemonList: any[]) => {
+        const serverPokemon = pokemonList.map((pokemon: any) => ({
+            id: pokemon.id,
+            name: pokemon.name,
+            spriteURL: pokemon.spriteURL
+        }));
+        setGamePokemon(serverPokemon);
+        setError(null);
+    }, []);
+
     return {
         gamePokemon,
         loading,
         error,
         loadPokemon,
-        clearPokemon
+        clearPokemon,
+        setPokemonFromServer
     };
 };

@@ -9,6 +9,8 @@ export type Player = {
     livesRemaining: number;
     roundsCompleted: number;
     isHost: boolean;
+    finished?: boolean;
+    finalScore?: number;
 };
 
 export type Party = {
@@ -17,6 +19,10 @@ export type Party = {
     players: Player[];
     pokemonList: any[];
     gameStartTime: number | null;
+    gameResult?: {
+        winner: Player | null;
+        tiedPlayers: Player[] | null;
+    } | null;
 };
 
 export type MultiplayerState = {
@@ -29,37 +35,51 @@ export type MultiplayerState = {
     loading: boolean;
 };
 
-export const useMultiplayer = () => {
-    const [state, setState] = useState<MultiplayerState>({
-        partyCode: null,
-        playerId: null,
-        party: null,
-        isHost: false,
-        isConnected: false,
-        error: null,
-        loading: false
-    });
+// Global state to persist across screen navigation
+let globalState: MultiplayerState = {
+    partyCode: null,
+    playerId: null,
+    party: null,
+    isHost: false,
+    isConnected: false,
+    error: null,
+    loading: false
+};
 
-    const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+let globalPollingInterval: ReturnType<typeof setInterval> | null = null;
+
+export const useMultiplayer = () => {
+    const [state, setState] = useState<MultiplayerState>(globalState);
+
+    // Sync local state with global state
+    useEffect(() => {
+        setState(globalState);
+    }, []);
+
+    // Update global state whenever local state changes
+    useEffect(() => {
+        globalState = state;
+    }, [state]);
 
     useEffect(() => {
         return () => {
-            if (pollingInterval.current) {
-                clearInterval(pollingInterval.current);
+            if (globalPollingInterval) {
+                clearInterval(globalPollingInterval);
             }
         };
     }, []);
 
     const startPolling = useCallback((partyCode: string) => {
-        if (pollingInterval.current) {
-            clearInterval(pollingInterval.current);
+        if (globalPollingInterval) {
+            clearInterval(globalPollingInterval);
         }
 
-        pollingInterval.current = setInterval(async () => {
+        globalPollingInterval = setInterval(async () => {
             try {
                 const response = await fetch(`${SERVER_URL}/api/parties/${partyCode}/status`);
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('Polling update:', data);
                     setState(prev => ({
                         ...prev,
                         party: {
@@ -78,9 +98,9 @@ export const useMultiplayer = () => {
     }, []);
 
     const stopPolling = useCallback(() => {
-        if (pollingInterval.current) {
-            clearInterval(pollingInterval.current);
-            pollingInterval.current = null;
+        if (globalPollingInterval) {
+            clearInterval(globalPollingInterval);
+            globalPollingInterval = null;
         }
     }, []);
 
@@ -179,7 +199,10 @@ export const useMultiplayer = () => {
     }, [startPolling]);
 
     const startGame = useCallback(async () => {
+        console.log('Starting game with state:', { partyCode: state.partyCode, playerId: state.playerId, isConnected: state.isConnected });
+        
         if (!state.partyCode || !state.playerId) {
+            console.error('Missing party data:', { partyCode: state.partyCode, playerId: state.playerId });
             throw new Error('Not connected to a party');
         }
 
@@ -198,6 +221,7 @@ export const useMultiplayer = () => {
             }
 
             const data = await response.json();
+            console.log('Game started successfully:', data);
             
             setState(prev => ({
                 ...prev,
@@ -211,6 +235,7 @@ export const useMultiplayer = () => {
 
             return data;
         } catch (error) {
+            console.error('Failed to start game:', error);
             setState(prev => ({
                 ...prev,
                 error: error instanceof Error ? error.message : 'Failed to start game'
@@ -256,6 +281,51 @@ export const useMultiplayer = () => {
             return data;
         } catch (error) {
             console.error('Failed to update score:', error);
+            throw error;
+        }
+    }, [state.partyCode, state.playerId]);
+
+    const finishGame = useCallback(async (finalScore: number, livesRemaining: number, roundsCompleted: number) => {
+        if (!state.partyCode || !state.playerId) {
+            throw new Error('Not connected to a party');
+        }
+
+        try {
+            const response = await fetch(`${SERVER_URL}/api/parties/${state.partyCode}/finish`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    playerId: state.playerId,
+                    finalScore,
+                    livesRemaining,
+                    roundsCompleted
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to finish game');
+            }
+
+            const data = await response.json();
+            
+            setState(prev => ({
+                ...prev,
+                party: prev.party ? {
+                    ...prev.party,
+                    players: data.players,
+                    gameResult: data.allFinished ? {
+                        winner: data.winner,
+                        tiedPlayers: data.tiedPlayers
+                    } : null
+                } : null
+            }));
+
+            return data;
+        } catch (error) {
+            console.error('Failed to finish game:', error);
             throw error;
         }
     }, [state.partyCode, state.playerId]);
@@ -325,6 +395,7 @@ export const useMultiplayer = () => {
         joinParty,
         startGame,
         updateScore,
+        finishGame,
         endParty,
         leaveParty,
         clearError
