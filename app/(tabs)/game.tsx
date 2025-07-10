@@ -1,7 +1,8 @@
 import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
-import { useCallback, useReducer } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View, Dimensions, KeyboardAvoidingView, Platform, ColorValue } from 'react-native';
+import { useCallback, useReducer, useRef, useState, useEffect } from 'react';
+import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View, Dimensions, KeyboardAvoidingView, Platform, ColorValue, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { usePokemon } from '../../hooks/usePokemon';
 import { useTimer } from '../../hooks/useTimer';
@@ -33,18 +34,28 @@ const reducer = (state:any, action:any) => {
     case 'revealSprite':
       return {...state, spriteVisible: true};
     case 'skipPokemon':
-      return {...state,
+      const newStateSkip = {...state,
         currentPokemonIndex: state.currentPokemonIndex + 1,
-        lifeNum: state.lifeNum - 1,
+        lifeNum: Math.max(0, state.lifeNum - 1),
         guessText: ""
       };
+      // Check for game over after state update
+      if (newStateSkip.lifeNum <= 0 || newStateSkip.roundNum >= 5) {
+        return {...newStateSkip, modalVisible: true};
+      }
+      return newStateSkip;
     case 'timerExpire':
-      return {...state,
+      const newStateTimer = {...state,
         currentPokemonIndex: state.currentPokemonIndex + 1,
         roundNum: state.roundNum + 1,
-        lifeNum: state.lifeNum - 1,
+        lifeNum: Math.max(0, state.lifeNum - 1),
         guessText: ""
       };
+      // Check for game over after state update
+      if (newStateTimer.lifeNum <= 0 || newStateTimer.roundNum >= 5) {
+        return {...newStateTimer, modalVisible: true};
+      }
+      return newStateTimer;
     case 'correctGuess':
       return {...state,
         currentPokemonIndex: state.currentPokemonIndex + 1,
@@ -79,8 +90,53 @@ const CARD_COLOR = ACCENT_GRADIENT[1];
 export default function GameScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const theme = (params.theme === 'dark' ? 'dark' : 'light') as 'light' | 'dark';
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const {gamePokemon, loading, error, loadPokemon, clearPokemon} = usePokemon();
+
+  useEffect(() => {
+    loadTheme();
+  }, []);
+
+  const loadTheme = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        setTheme(savedTheme as 'light' | 'dark');
+      } else {
+        // Fallback to route params if no saved theme
+        setTheme((params.theme === 'dark' ? 'dark' : 'light') as 'light' | 'dark');
+      }
+    } catch (error) {
+      console.error('Error loading theme:', error);
+      // Fallback to route params
+      setTheme((params.theme === 'dark' ? 'dark' : 'light') as 'light' | 'dark');
+    }
+  };
+
+  const saveScore = async (score: number, livesRemaining: number, roundsCompleted: number) => {
+    try {
+      const newRecord = {
+        id: Date.now().toString(),
+        score,
+        date: new Date().toISOString(),
+        livesRemaining,
+        roundsCompleted,
+      };
+
+      const existingRecords = await AsyncStorage.getItem('scoreRecords');
+      let records = existingRecords ? JSON.parse(existingRecords) : [];
+      
+      // Add new record
+      records.push(newRecord);
+      
+      // Keep only top 50 records
+      records = records.sort((a: any, b: any) => b.score - a.score).slice(0, 50);
+      
+      await AsyncStorage.setItem('scoreRecords', JSON.stringify(records));
+    } catch (error) {
+      console.error('Error saving score:', error);
+    }
+  };
 
   const [state, dispatch] = useReducer(reducer, {
     currentPokemonIndex: 0,
@@ -93,15 +149,31 @@ export default function GameScreen() {
     scoreData: []}
   );
 
+  const [betweenRounds, setBetweenRounds] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  // Save score when game ends
+  useEffect(() => {
+    if (state.modalVisible) {
+      saveScore(state.score, state.lifeNum, state.roundNum);
+    }
+  }, [state.modalVisible]);
+
+  const startShake = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -1, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+    ]).start();
+  };
+
   const handleTimerExpire = () => {
     stopTimer();
-    if (state.lifeNum === 1 || state.roundNum === 5){
-      dispatch({type: ACTIONS.GAME_OVER});
-    }else{
-      dispatch({type: ACTIONS.TIMER_EXPIRE});
-        resetTimer();
-        startTimer();
-    }
+    dispatch({type: ACTIONS.TIMER_EXPIRE});
+    resetTimer();
+    startTimer();
   }
 
   const {time, startTimer, stopTimer, resetTimer} = useTimer(30, handleTimerExpire);
@@ -132,10 +204,22 @@ export default function GameScreen() {
     stopTimer();
     dispatch({type: ACTIONS.REVEAL_SPRITE});
     dispatch({type: ACTIONS.UPDATE_SCORE, payload: time});
-    if (state.roundNum === 5) {//on final round
+    setBetweenRounds(true);
+    setCountdown(3);
+    startShake();
+    let interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev === 1) {
+          clearInterval(interval);
+          setBetweenRounds(false);
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    if (state.roundNum === 5) {
       dispatch({type: ACTIONS.GAME_OVER});
-    }else{//more rounds
-      setTimeout(() => {//3 sec wait 
+    } else {
+      setTimeout(() => {
         dispatch({type: ACTIONS.CORRECT_GUESS});
         resetTimer();
         startTimer();
@@ -145,15 +229,16 @@ export default function GameScreen() {
 
   const handleSkip = () => {
     stopTimer();
-    if (state.lifeNum === 1){//skipped or timedout on last life
-      dispatch({type: ACTIONS.GAME_OVER});
-    }else{//normal skip
-      dispatch({type: ACTIONS.SKIP_POKEMON});
-      resetTimer();
-      startTimer();
-    }
+    dispatch({type: ACTIONS.SKIP_POKEMON});
+    resetTimer();
+    startTimer();
   }
   
+  const handleGameOver = () => {
+    // Save the score when game ends
+    saveScore(state.score, state.lifeNum, state.roundNum);
+  };
+
   return (
     <LinearGradient
       colors={(theme === 'light' ? LIGHT_GRADIENT : DARK_GRADIENT) as [ColorValue, ColorValue]}
@@ -208,24 +293,20 @@ export default function GameScreen() {
           </View>
         </Modal>
 
-        {/* Loading State */}
         {loading && (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading Pokémon...</Text>
           </View>
         )}
 
-        {/* Error State */}
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
 
-        {/* Game Content */}
         {!loading && gamePokemon.length > 0 && (
           <>
-            {/* Game Info Header */}
             <View style={styles.gameInfoContainer}>
               <View style={styles.infoRow}>
                 <View style={styles.infoItem}>
@@ -248,22 +329,31 @@ export default function GameScreen() {
               </View>
             </View>
 
-            {/* Pokémon Card with Silhouette */}
             <View style={styles.cardContainer}>
               <View style={styles.pokemonCard}>
-                {/* Replace with actual silhouette image or placeholder */}
-                {/* Example: */}
                 {gamePokemon[state.currentPokemonIndex] && (
-                  <Image
+                  <Animated.Image
                     source={{ uri: gamePokemon[state.currentPokemonIndex].spriteURL }}
-                    style={styles.pokemonImage}
+                    style={[
+                      state.spriteVisible ? styles.spriteRevealed : styles.pokemonImage,
+                      betweenRounds && {
+                        transform: [{ translateX: shakeAnim.interpolate({
+                          inputRange: [-1, 1],
+                          outputRange: [-10, 10],
+                        }) }],
+                      },
+                    ]}
                     resizeMode="contain"
                   />
+                )}
+                {betweenRounds && (
+                  <View style={styles.countdownOverlay}>
+                    <Text style={styles.countdownText}>{countdown > 0 ? countdown : ''}</Text>
+                  </View>
                 )}
               </View>
             </View>
 
-            {/* Input and Controls */}
             <View style={styles.inputContainer}>
               <TextInput 
                 placeholder="Type your guess..." 
@@ -271,7 +361,22 @@ export default function GameScreen() {
                 autoCorrect={false}
                 value={state.guessText}
                 onChangeText={handleGuessChange}
+                editable={!betweenRounds}
                 style={styles.input} 
+                onSubmitEditing={() => {
+                  const guess = state.guessText.trim().toLowerCase();
+                  const answer = gamePokemon[state.currentPokemonIndex]?.name.toLowerCase();
+                  if (guess === answer) {
+                    handleCorrectGuess();
+                  } else if (guess.length > 0 && !betweenRounds) {
+                    // Subtract a life and clear input
+                    if (state.lifeNum === 1) {
+                      dispatch({type: ACTIONS.GAME_OVER});
+                    } else {
+                      dispatch({type: ACTIONS.SKIP_POKEMON});
+                    }
+                  }
+                }}
               />
               
               <View style={styles.buttonRow}>
@@ -280,7 +385,8 @@ export default function GameScreen() {
                     styles.skipButton,
                     pressed && styles.buttonPressed
                   ]}
-                  onPress={() => handleSkip()}
+                  onPress={handleSkip}
+                  disabled={betweenRounds}
                 >
                   <Text style={styles.skipButtonText}>Skip</Text>
                 </Pressable>
@@ -508,5 +614,24 @@ const styles = StyleSheet.create({
     height: 120,
     opacity: 0.5, // silhouette effect
     tintColor: '#222', // dark silhouette
+  },
+  countdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    zIndex: 2,
+  },
+  countdownText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
   },
 });

@@ -2,6 +2,7 @@ import { StyleSheet, Dimensions, Pressable, View, Text, Switch, ColorValue } fro
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -15,6 +16,7 @@ export default function HomeScreen() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
+    loadTheme();
     // Check network connectivity
     const checkNetwork = async () => {
       try {
@@ -29,7 +31,26 @@ export default function HomeScreen() {
     checkNetwork();
   }, []);
 
-  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
+  const loadTheme = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        setTheme(savedTheme as 'light' | 'dark');
+      }
+    } catch (error) {
+      console.error('Error loading theme:', error);
+    }
+  };
+
+  const toggleTheme = async () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    try {
+      await AsyncStorage.setItem('theme', newTheme);
+    } catch (error) {
+      console.error('Error saving theme:', error);
+    }
+  };
 
   return (
     <LinearGradient
@@ -48,7 +69,6 @@ export default function HomeScreen() {
           <Text style={styles.mainTitle}>Who's That</Text>
           <Text style={styles.pokemonTitle}>Pokémon?</Text>
         </View>
-        {/* Group button and toggle together */}
         <View style={styles.actionContainer}>
           <View style={styles.buttonContainer}>
             <Pressable 
@@ -76,8 +96,23 @@ export default function HomeScreen() {
             />
             <Text style={[styles.themeToggleLabel, {color: theme === 'light' ? '#222' : '#eee'}]}>Dark</Text>
           </View>
+          <View style={styles.recordsButtonContainer}>
+            <Pressable 
+              style={({ pressed }) => [
+                styles.recordsButton,
+                pressed && styles.recordsButtonPressed
+              ]}
+              onPress={() => router.push('./records')}
+            >
+              <LinearGradient
+                colors={[ACCENT_GRADIENT[1], ACCENT_GRADIENT[0]] as [ColorValue, ColorValue]}
+                style={styles.recordsButtonGradient}
+              >
+                <Text style={[styles.recordsButtonText, {color: theme === 'light' ? '#eee' : '#222'}]}>View Records</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
         </View>
-        {/* Move offline warning to bottom */}
         <View style={styles.bottomWarningContainer}>
           {networkStatus === 'offline' && (
             <View style={styles.networkWarning}>
@@ -235,5 +270,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+  },
+  recordsButtonContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  recordsButton: {
+    width: width * 0.4,
+    height: 50,
+    borderRadius: 30,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  recordsButtonPressed: {
+    transform: [{ scale: 0.95 }],
+  },
+  recordsButtonGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordsButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
 });
