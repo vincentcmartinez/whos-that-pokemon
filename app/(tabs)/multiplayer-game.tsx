@@ -276,17 +276,7 @@ export default function MultiplayerGameScreen() {
     router.push('./');
   };
 
-  // Debug logging
-  console.log('MultiplayerGameScreen state:', { 
-    hasParty: !!party, 
-    isConnected, 
-    partyCode, 
-    partyStatus: party?.status,
-    pokemonCount: party?.pokemonList?.length,
-    gamePokemonCount: gamePokemon.length,
-    currentPokemonIndex: state.currentPokemonIndex,
-    currentPokemon: gamePokemon[state.currentPokemonIndex]?.name
-  });
+
 
   if (!party) {
     return (
@@ -359,14 +349,7 @@ export default function MultiplayerGameScreen() {
   const allPlayersFinished = party?.players?.every((p: any) => p.finished);
   const gameResult = party?.gameResult;
 
-  // Debug logging
-  console.log('MultiplayerGameScreen render:', {
-    modalVisible: state.modalVisible,
-    gameFinished,
-    allPlayersFinished,
-    gameResult,
-    players: party?.players?.map((p: any) => ({ name: p.name, finished: p.finished, finalScore: p.finalScore }))
-  });
+
 
   return (
     <LinearGradient

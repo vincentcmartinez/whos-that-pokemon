@@ -3,26 +3,28 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   Dimensions,
   Alert,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  ColorValue
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useMultiplayer } from '../../hooks/useMultiplayer';
-import { useThemeColor } from '../../hooks/useThemeColor';
-import { useColorScheme } from '../../hooks/useColorScheme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
+const LIGHT_GRADIENT: ColorValue[] = ['#9191E9', '#f9fbf2'];
+const DARK_GRADIENT: ColorValue[] = ['#2f3061', '#1b180e'];
+const ACCENT_GRADIENT: ColorValue[] = ['#C2AFF0', '#9191E9'];
+
 export default function MultiplayerScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   
   const {
     partyCode,
@@ -42,11 +44,25 @@ export default function MultiplayerScreen() {
   const [joinCode, setJoinCode] = useState('');
   const [showJoinForm, setShowJoinForm] = useState(false);
 
-  // Auto-navigate to game screen when game starts
   useEffect(() => {
-    console.log('Party status changed:', party?.status, 'isConnected:', isConnected);
+    loadTheme();
+  }, []);
+
+  const loadTheme = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        setTheme(savedTheme as 'light' | 'dark');
+      } else {
+        setTheme('light');
+      }
+    } catch (error) {
+      console.error('Error loading theme:', error);
+      setTheme('light');
+    }
+  };
+  useEffect(() => {
     if (party?.status === 'playing') {
-      console.log('Navigating to multiplayer game');
       router.push('./multiplayer-game');
     }
   }, [party?.status, router, isConnected]);
@@ -85,7 +101,7 @@ export default function MultiplayerScreen() {
   const handleStartGame = async () => {
     try {
       await startGame();
-      // Navigate to multiplayer game screen
+
       router.push('./multiplayer-game');
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to start game');
@@ -103,95 +119,99 @@ export default function MultiplayerScreen() {
     );
   };
 
-  const getGradientColors = (): [string, string] => {
-    return colorScheme === 'dark' 
-      ? ['#4A148C', '#1A1A1A'] 
-      : ['#E3F2FD', '#FFFFFF'];
-  };
-
-  const getButtonGradientColors = (): [string, string] => {
-    return colorScheme === 'dark' 
-      ? ['#FFD700', '#FFA500'] 
-      : ['#FFD700', '#FFA500'];
-  };
-
-  const getSecondaryButtonGradientColors = (): [string, string] => {
-    return colorScheme === 'dark' 
-      ? ['#FFA500', '#FFD700'] 
-      : ['#FFA500', '#FFD700'];
-  };
-
   if (isConnected && party) {
     return (
       <LinearGradient
-        colors={getGradientColors()}
+        colors={(theme === 'light' ? LIGHT_GRADIENT : DARK_GRADIENT) as [ColorValue, ColorValue]}
         style={styles.container}
       >
+        <Stack.Screen options={{ 
+          headerTitle: '',
+          headerStyle: { backgroundColor: 'transparent' },
+          headerTintColor: '#fff',
+          headerTransparent: true,
+          headerBackVisible: true,
+        }} />
+        
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: textColor }]}>
-              Multiplayer Lobby
-            </Text>
-            <Text style={[styles.partyCode, { color: textColor }]}>
-              Party Code: {partyCode}
-            </Text>
+            <Text style={styles.title}>Multiplayer Lobby</Text>
+            <Text style={styles.partyCode}>Party Code: {partyCode}</Text>
           </View>
 
           <View style={styles.playersContainer}>
-            <Text style={[styles.sectionTitle, { color: textColor }]}>
+            <Text style={styles.sectionTitle}>
               Players ({party.players.length}/5)
             </Text>
             {party.players.map((player, index) => (
-              <View key={player.id} style={styles.playerRow}>
-                <Text style={[styles.playerName, { color: textColor }]}>
-                  {player.name} {player.isHost ? '(Host)' : ''}
-                </Text>
-                <Text style={[styles.playerScore, { color: textColor }]}>
-                  Score: {player.score}
-                </Text>
+              <View key={player.id} style={styles.playerCard}>
+                <View style={styles.playerInfo}>
+                  <Text style={styles.playerName}>
+                    {player.name} {player.isHost ? '(Host)' : ''}
+                  </Text>
+
+                </View>
+                {player.isHost && (
+                  <View style={styles.hostBadge}>
+                    <Text style={styles.hostBadgeText}>HOST</Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
 
           <View style={styles.statusContainer}>
-            <Text style={[styles.statusText, { color: textColor }]}>
+            <Text style={styles.statusText}>
               Status: {party.status === 'waiting' ? 'Waiting for players...' : 'Game in progress'}
             </Text>
           </View>
 
           <View style={styles.buttonContainer}>
             {isHost && party.status === 'waiting' && party.players.length >= 2 && (
-              <TouchableOpacity
-                style={styles.button}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.button,
+                  pressed && styles.buttonPressed
+                ]}
                 onPress={handleStartGame}
                 disabled={loading}
               >
                 <LinearGradient
-                  colors={getButtonGradientColors()}
-                  style={styles.gradientButton}
+                  colors={ACCENT_GRADIENT as [ColorValue, ColorValue]}
+                  style={styles.buttonGradient}
                 >
-                  <Text style={styles.buttonText}>Start Game</Text>
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Start Game</Text>
+                  )}
                 </LinearGradient>
-              </TouchableOpacity>
+              </Pressable>
             )}
 
             {!isHost && party.status === 'waiting' && (
-              <Text style={[styles.waitingText, { color: textColor }]}>
-                Waiting for host to start the game...
-              </Text>
+              <View style={styles.waitingContainer}>
+                <Text style={styles.waitingText}>
+                  Waiting for host to start the game...
+                </Text>
+              </View>
             )}
 
-            <TouchableOpacity
-              style={styles.button}
+            <Pressable
+              style={({ pressed }) => [
+                styles.button,
+                styles.secondaryButton,
+                pressed && styles.buttonPressed
+              ]}
               onPress={handleLeaveParty}
             >
               <LinearGradient
-                colors={getSecondaryButtonGradientColors()}
-                style={styles.gradientButton}
+                colors={[ACCENT_GRADIENT[1], ACCENT_GRADIENT[0]] as [ColorValue, ColorValue]}
+                style={styles.buttonGradient}
               >
                 <Text style={styles.buttonText}>Leave Party</Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </ScrollView>
       </LinearGradient>
@@ -200,109 +220,123 @@ export default function MultiplayerScreen() {
 
   return (
     <LinearGradient
-      colors={getGradientColors()}
+      colors={(theme === 'light' ? LIGHT_GRADIENT : DARK_GRADIENT) as [ColorValue, ColorValue]}
       style={styles.container}
     >
+              <Stack.Screen options={{ 
+          headerTitle: '',
+          headerStyle: { backgroundColor: 'transparent' },
+          headerTintColor: '#fff',
+          headerTransparent: true,
+          headerBackVisible: true,
+        }} />
+      
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: textColor }]}>
-            Multiplayer
-          </Text>
-          <Text style={[styles.subtitle, { color: textColor }]}>
-            Play with friends!
-          </Text>
+          <Text style={styles.title}>Multiplayer</Text>
+          <Text style={styles.subtitle}>Play with friends!</Text>
         </View>
 
         <View style={styles.formContainer}>
-          <TextInput
-            style={[styles.input, { 
-              backgroundColor: colorScheme === 'dark' ? '#333' : '#f0f0f0',
-              color: textColor,
-              borderColor: colorScheme === 'dark' ? '#555' : '#ddd'
-            }]}
-            placeholder="Enter your name"
-            placeholderTextColor={colorScheme === 'dark' ? '#aaa' : '#666'}
-            value={playerName}
-            onChangeText={setPlayerName}
-            maxLength={20}
-          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your name"
+              placeholderTextColor="rgba(255, 255, 255, 0.6)"
+              value={playerName}
+              onChangeText={setPlayerName}
+              maxLength={20}
+            />
+          </View>
 
           {!showJoinForm ? (
             <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.button}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.button,
+                  pressed && styles.buttonPressed
+                ]}
                 onPress={handleCreateParty}
                 disabled={loading}
               >
                 <LinearGradient
-                  colors={getButtonGradientColors()}
-                  style={styles.gradientButton}
+                  colors={ACCENT_GRADIENT as [ColorValue, ColorValue]}
+                  style={styles.buttonGradient}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#000" />
+                    <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={styles.buttonText}>Create Party</Text>
                   )}
                 </LinearGradient>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                style={styles.button}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.secondaryButton,
+                  pressed && styles.buttonPressed
+                ]}
                 onPress={() => setShowJoinForm(true)}
               >
                 <LinearGradient
-                  colors={getSecondaryButtonGradientColors()}
-                  style={styles.gradientButton}
+                  colors={[ACCENT_GRADIENT[1], ACCENT_GRADIENT[0]] as [ColorValue, ColorValue]}
+                  style={styles.buttonGradient}
                 >
                   <Text style={styles.buttonText}>Join Party</Text>
                 </LinearGradient>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           ) : (
             <View style={styles.joinContainer}>
-              <TextInput
-                style={[styles.input, { 
-                  backgroundColor: colorScheme === 'dark' ? '#333' : '#f0f0f0',
-                  color: textColor,
-                  borderColor: colorScheme === 'dark' ? '#555' : '#ddd'
-                }]}
-                placeholder="Enter party code"
-                placeholderTextColor={colorScheme === 'dark' ? '#aaa' : '#666'}
-                value={joinCode}
-                onChangeText={setJoinCode}
-                maxLength={6}
-                autoCapitalize="characters"
-              />
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter party code"
+                  placeholderTextColor="rgba(255, 255, 255, 0.6)"
+                  value={joinCode}
+                  onChangeText={setJoinCode}
+                  maxLength={6}
+                  autoCapitalize="characters"
+                />
+              </View>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={styles.button}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.button,
+                    pressed && styles.buttonPressed
+                  ]}
                   onPress={handleJoinParty}
                   disabled={loading}
                 >
                   <LinearGradient
-                    colors={getButtonGradientColors()}
-                    style={styles.gradientButton}
+                    colors={ACCENT_GRADIENT as [ColorValue, ColorValue]}
+                    style={styles.buttonGradient}
                   >
                     {loading ? (
-                      <ActivityIndicator color="#000" />
+                      <ActivityIndicator color="#fff" />
                     ) : (
                       <Text style={styles.buttonText}>Join</Text>
                     )}
                   </LinearGradient>
-                </TouchableOpacity>
+                </Pressable>
 
-                <TouchableOpacity
-                  style={styles.button}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.secondaryButton,
+                    pressed && styles.buttonPressed
+                  ]}
                   onPress={() => setShowJoinForm(false)}
                 >
                   <LinearGradient
-                    colors={getSecondaryButtonGradientColors()}
-                    style={styles.gradientButton}
+                    colors={[ACCENT_GRADIENT[1], ACCENT_GRADIENT[0]] as [ColorValue, ColorValue]}
+                    style={styles.buttonGradient}
                   >
                     <Text style={styles.buttonText}>Back</Text>
                   </LinearGradient>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
           )}
@@ -311,9 +345,9 @@ export default function MultiplayerScreen() {
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={clearError}>
+            <Pressable onPress={clearError} style={styles.dismissButton}>
               <Text style={styles.dismissText}>Dismiss</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -328,6 +362,7 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     padding: 20,
+    paddingTop: 100,
   },
   header: {
     alignItems: 'center',
@@ -336,45 +371,69 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
+    color: '#fff',
     marginBottom: 10,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     fontSize: 18,
-    opacity: 0.8,
+    color: '#fff',
+    opacity: 0.9,
+    textAlign: 'center',
   },
   partyCode: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: '#ffd700',
     marginTop: 10,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   formContainer: {
     flex: 1,
     justifyContent: 'center',
   },
+  inputContainer: {
+    marginBottom: 20,
+  },
   input: {
     height: 50,
-    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 25,
     paddingHorizontal: 20,
-    marginBottom: 20,
     fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
   },
   buttonContainer: {
     gap: 15,
   },
   button: {
-    borderRadius: 30,
+    borderRadius: 25,
     overflow: 'hidden',
   },
-  gradientButton: {
+  secondaryButton: {
+    marginTop: 5,
+  },
+  buttonGradient: {
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
   },
   buttonText: {
-    color: '#000',
+    color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
   joinContainer: {
     marginTop: 20,
@@ -385,25 +444,44 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    color: '#fff',
     marginBottom: 15,
+    textAlign: 'center',
   },
-  playerRow: {
+  playerCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    marginBottom: 8,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 15,
+    marginBottom: 10,
+  },
+  playerInfo: {
+    flex: 1,
   },
   playerName: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
   },
   playerScore: {
     fontSize: 14,
+    color: '#fff',
     opacity: 0.8,
+  },
+  hostBadge: {
+    backgroundColor: '#ffd700',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  hostBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#000',
   },
   statusContainer: {
     alignItems: 'center',
@@ -412,26 +490,37 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 18,
     fontWeight: '500',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  waitingContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
   },
   waitingText: {
     fontSize: 16,
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 20,
+    opacity: 0.9,
   },
   errorContainer: {
-    backgroundColor: 'rgba(255, 0, 0, 0.1)',
+    backgroundColor: 'rgba(255, 0, 0, 0.2)',
     padding: 15,
-    borderRadius: 10,
+    borderRadius: 15,
     marginTop: 20,
+    alignItems: 'center',
   },
   errorText: {
-    color: '#ff0000',
+    color: '#fff',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 10,
   },
+  dismissButton: {
+    paddingVertical: 5,
+  },
   dismissText: {
-    color: '#ff0000',
+    color: '#fff',
     fontSize: 14,
     textAlign: 'center',
     textDecorationLine: 'underline',

@@ -190,8 +190,6 @@ app.post('/api/parties/:code/join', async (req, res) => {
 
         party.players.push(newPlayer);
 
-        console.log(`Player ${playerName} joined party ${code}`);
-
         res.json({
             partyCode: code,
             playerId: newPlayer.id,
@@ -249,8 +247,6 @@ app.post('/api/parties/:code/start', (req, res) => {
         party.status = 'playing';
         party.gameStartTime = Date.now();
 
-        console.log(`Game started for party ${code}`);
-
         res.json({
             status: 'playing',
             gameStartTime: party.gameStartTime,
@@ -281,8 +277,6 @@ app.post('/api/parties/:code/score', (req, res) => {
         player.score = score;
         player.livesRemaining = livesRemaining;
         player.roundsCompleted = roundsCompleted;
-
-        console.log(`Player ${player.name} updated score: ${score}`);
 
         res.json({
             players: party.players
@@ -315,8 +309,6 @@ app.post('/api/parties/:code/finish', (req, res) => {
         player.livesRemaining = livesRemaining;
         player.roundsCompleted = roundsCompleted;
 
-        console.log(`Player ${player.name} finished with score: ${finalScore}`);
-
         // Check if all players have finished
         const allPlayersFinished = party.players.every(p => p.finished);
         
@@ -333,8 +325,6 @@ app.post('/api/parties/:code/finish', (req, res) => {
                 winner: tiedPlayers.length > 1 ? null : winner,
                 tiedPlayers: tiedPlayers.length > 1 ? tiedPlayers : null
             };
-            
-            console.log('Game finished - stored result:', party.gameResult);
             
             res.json({
                 players: party.players,
@@ -375,8 +365,6 @@ app.delete('/api/parties/:code', (req, res) => {
 
         parties.delete(code);
 
-        console.log(`Party ${code} ended. Winner: ${winner.name} with score ${winner.score}`);
-
         res.json({
             winner: {
                 name: winner.name,
@@ -399,12 +387,6 @@ app.get('/api/parties/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Party not found' });
         }
 
-        console.log('Status endpoint response:', {
-            status: party.status,
-            players: party.players.map(p => ({ name: p.name, finished: p.finished, finalScore: p.finalScore })),
-            gameResult: party.gameResult
-        });
-        
         res.json({
             status: party.status,
             players: party.players,

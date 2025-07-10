@@ -79,8 +79,6 @@ export const useMultiplayer = () => {
                 const response = await fetch(`${SERVER_URL}/api/parties/${partyCode}/status`);
                 if (response.ok) {
                                     const data = await response.json();
-                console.log('Polling update:', data);
-                console.log('Game result from polling:', data.gameResult);
                 setState(prev => ({
                     ...prev,
                     party: {
@@ -89,7 +87,7 @@ export const useMultiplayer = () => {
                         players: data.players,
                         pokemonList: prev.party?.pokemonList || [],
                         gameStartTime: data.gameStartTime,
-                        gameResult: data.gameResult || null
+                        gameResult: data.gameResult || prev.party?.gameResult || null
                     }
                 }));
                 }
@@ -201,10 +199,7 @@ export const useMultiplayer = () => {
     }, [startPolling]);
 
     const startGame = useCallback(async () => {
-        console.log('Starting game with state:', { partyCode: state.partyCode, playerId: state.playerId, isConnected: state.isConnected });
-        
         if (!state.partyCode || !state.playerId) {
-            console.error('Missing party data:', { partyCode: state.partyCode, playerId: state.playerId });
             throw new Error('Not connected to a party');
         }
 
@@ -223,7 +218,6 @@ export const useMultiplayer = () => {
             }
 
             const data = await response.json();
-            console.log('Game started successfully:', data);
             
             setState(prev => ({
                 ...prev,
