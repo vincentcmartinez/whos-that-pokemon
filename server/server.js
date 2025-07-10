@@ -54,7 +54,14 @@ const getRandomIDs = (n, gens) => {
 
 const fetchPokemon = async (id) => {
     try {
-        const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
+        // Use a more robust fetch with proper headers
+        const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`, {
+            headers: {
+                'User-Agent': 'Pokemon-Game-Server/1.0',
+                'Accept': 'application/json'
+            },
+            timeout: 5000
+        });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -67,7 +74,10 @@ const fetchPokemon = async (id) => {
             spriteURL: data.sprites.front_default
         };
     } catch (error) {
-        console.error("Fetch Error for Pokemon ID", id, error);
+        // Only log the first few errors to avoid spam
+        if (id <= 5) {
+            console.error("Fetch Error for Pokemon ID", id, error.message);
+        }
         // Return a fallback Pokémon if API fails
         const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
         return FALLBACK_POKEMON[fallbackIndex];

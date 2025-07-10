@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const SERVER_URL = 'placeholder';
+const SERVER_URL = 'https://df0c133b871f.ngrok-free.app';
 
 export type Player = {
     id: string;

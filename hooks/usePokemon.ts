@@ -81,12 +81,6 @@ export const usePokemon = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const setPokemonFromServer = useCallback((pokemonList: Pokemon[]) => {
-        setGamePokemon(pokemonList);
-        setLoading(false);
-        setError(null);
-    }, []);
-
     const loadPokemon = useCallback(async (count=9, generations=[1]) => {//default 9 pokemon from gen 1
         setLoading(true);
         setError(null);
@@ -117,7 +111,6 @@ export const usePokemon = () => {
         loading,
         error,
         loadPokemon,
-        clearPokemon,
-        setPokemonFromServer
+        clearPokemon
     };
 };

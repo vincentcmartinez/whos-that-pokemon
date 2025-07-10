@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -41,6 +41,13 @@ export default function MultiplayerScreen() {
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [showJoinForm, setShowJoinForm] = useState(false);
+
+  // Auto-navigate to game screen when game starts
+  useEffect(() => {
+    if (party?.status === 'playing') {
+      router.push('./multiplayer-game');
+    }
+  }, [party?.status, router]);
 
   const handleCreateParty = async () => {
     if (!playerName.trim()) {
