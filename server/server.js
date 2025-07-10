@@ -53,9 +53,13 @@ const getRandomIDs = (n, gens) => {
 };
 
 const fetchPokemon = async (id) => {
+    console.log(`Fetching Pokemon ID: ${id}`);
     try {
         // Use a more robust fetch with proper headers
-        const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`, {
+        const url = `https://pokeapi.co/api/v2/pokemon/${id}`;
+        console.log(`Making request to: ${url}`);
+        
+        const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Pokemon-Game-Server/1.0',
                 'Accept': 'application/json'
@@ -63,24 +67,29 @@ const fetchPokemon = async (id) => {
             timeout: 5000
         });
         
+        console.log(`Response status for Pokemon ${id}:`, response.status);
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log(`Successfully fetched Pokemon ${id}: ${data.name}`);
+        
         return {
             id, 
             name: data.name,
             spriteURL: data.sprites.front_default
         };
     } catch (error) {
-        // Only log the first few errors to avoid spam
-        if (id <= 5) {
-            console.error("Fetch Error for Pokemon ID", id, error.message);
-        }
+        console.error(`Fetch Error for Pokemon ID ${id}:`, error.message);
+        console.error(`Full error:`, error);
+        
         // Return a fallback Pokémon if API fails
         const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
-        return FALLBACK_POKEMON[fallbackIndex];
+        const fallback = FALLBACK_POKEMON[fallbackIndex];
+        console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+        return fallback;
     }
 };
 const generatePartyCode = () => {
@@ -116,9 +125,15 @@ app.post('/api/parties', async (req, res) => {
             partyCode = generatePartyCode();
         } while (parties.has(partyCode));
 
+        console.log('Creating party:', partyCode, 'for player:', playerName);
+        
         const pokemonIDList = getRandomIDs(9, [1]);
+        console.log('Generated Pokemon IDs:', pokemonIDList);
+        
+        console.log('Starting Pokemon API calls...');
         const pokemonPromises = pokemonIDList.map(id => fetchPokemon(id));
         const pokemonList = await Promise.all(pokemonPromises);
+        console.log('Pokemon API calls completed. Retrieved:', pokemonList.length, 'Pokemon');
 
         const party = {
             code: partyCode,
@@ -139,6 +154,7 @@ app.post('/api/parties', async (req, res) => {
         parties.set(partyCode, party);
 
         console.log(`Party created: ${partyCode} by ${playerName}`);
+        console.log(`Final Pokemon list:`, pokemonList.map(p => ({ id: p.id, name: p.name })));
         
         res.json({
             partyCode,
@@ -409,4 +425,19 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`  POST /api/parties/:code/score - Update score`);
     console.log(`  DELETE /api/parties/:code - End party`);
     console.log(`  GET /api/parties/:code/status - Get party status`);
+    
+    // Test PokeAPI connectivity
+    console.log('Testing PokeAPI connectivity...');
+    fetch('https://pokeapi.co/api/v2/pokemon/1')
+        .then(response => {
+            console.log('PokeAPI connectivity test - Status:', response.status);
+            if (response.ok) {
+                console.log('✅ PokeAPI is accessible');
+            } else {
+                console.log('❌ PokeAPI returned error status:', response.status);
+            }
+        })
+        .catch(error => {
+            console.log('❌ PokeAPI connectivity test failed:', error.message);
+        });
 }); 
