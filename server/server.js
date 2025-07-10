@@ -57,97 +57,80 @@ const getRandomIDs = (n, gens) => {
 const fetchPokemon = async (id) => {
     console.log(`Fetching Pokemon ID: ${id}`);
     return new Promise((resolve) => {
-        const makeRequest = (useHttps = true) => {
-            try {
-                const url = useHttps ? `https://pokeapi.co/api/v2/pokemon/${id}` : `http://pokeapi.co/api/v2/pokemon/${id}`;
-                console.log(`Making ${useHttps ? 'HTTPS' : 'HTTP'} request to: ${url}`);
+        try {
+            const url = `https://pokeapi.co/api/v2/pokemon/${id}`;
+            console.log(`Making HTTPS request to: ${url}`);
+            
+            const request = https.get(url, {
+                headers: {
+                    'User-Agent': 'Pokemon-Game-Server/1.0',
+                    'Accept': 'application/json'
+                },
+                timeout: 15000,
+                rejectUnauthorized: false,
+                servername: 'pokeapi.co'
+            }, (response) => {
+                console.log(`Response status for Pokemon ${id}:`, response.statusCode);
                 
-                const request = useHttps ? https.get(url, {
-                    headers: {
-                        'User-Agent': 'Pokemon-Game-Server/1.0',
-                        'Accept': 'application/json'
-                    },
-                    timeout: 10000,
-                    rejectUnauthorized: false
-                }, handleResponse) : http.get(url, {
-                    headers: {
-                        'User-Agent': 'Pokemon-Game-Server/1.0',
-                        'Accept': 'application/json'
-                    },
-                    timeout: 10000
-                }, handleResponse);
+                if (response.statusCode !== 200) {
+                    console.error(`HTTP error for Pokemon ${id}: status ${response.statusCode}`);
+                    const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+                    const fallback = FALLBACK_POKEMON[fallbackIndex];
+                    console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+                    resolve(fallback);
+                    return;
+                }
                 
-                request.on('error', (error) => {
-                    console.error(`${useHttps ? 'HTTPS' : 'HTTP'} Error for Pokemon ID ${id}:`, error.message);
-                    console.error(`Error code:`, error.code);
-                    
-                    if (useHttps) {
-                        console.log(`Retrying with HTTP for Pokemon ID ${id}...`);
-                        makeRequest(false);
-                    } else {
+                let data = '';
+                response.on('data', (chunk) => {
+                    data += chunk;
+                });
+                
+                response.on('end', () => {
+                    try {
+                        const pokemonData = JSON.parse(data);
+                        console.log(`Successfully fetched Pokemon ${id}: ${pokemonData.name}`);
+                        
+                        resolve({
+                            id, 
+                            name: pokemonData.name,
+                            spriteURL: pokemonData.sprites.front_default
+                        });
+                    } catch (parseError) {
+                        console.error(`JSON parse error for Pokemon ${id}:`, parseError.message);
                         const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
                         const fallback = FALLBACK_POKEMON[fallbackIndex];
                         console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
                         resolve(fallback);
                     }
                 });
-                
-                request.on('timeout', () => {
-                    console.error(`Timeout for Pokemon ID ${id}`);
-                    request.destroy();
-                    const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
-                    const fallback = FALLBACK_POKEMON[fallbackIndex];
-                    console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
-                    resolve(fallback);
-                });
-                
-            } catch (error) {
-                console.error(`Unexpected error for Pokemon ID ${id}:`, error.message);
+            });
+            
+            request.on('error', (error) => {
+                console.error(`HTTPS Error for Pokemon ID ${id}:`, error.message);
+                console.error(`Error code:`, error.code);
                 const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
                 const fallback = FALLBACK_POKEMON[fallbackIndex];
                 console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
                 resolve(fallback);
-            }
-        };
-        
-        const handleResponse = (response) => {
-            console.log(`Response status for Pokemon ${id}:`, response.statusCode);
+            });
             
-            if (response.statusCode !== 200) {
-                console.error(`HTTP error for Pokemon ${id}: status ${response.statusCode}`);
+            request.on('timeout', () => {
+                console.error(`Timeout for Pokemon ID ${id}`);
+                request.destroy();
                 const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
                 const fallback = FALLBACK_POKEMON[fallbackIndex];
                 console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
                 resolve(fallback);
-                return;
-            }
-            
-            let data = '';
-            response.on('data', (chunk) => {
-                data += chunk;
             });
             
-            response.on('end', () => {
-                try {
-                    const pokemonData = JSON.parse(data);
-                    console.log(`Successfully fetched Pokemon ${id}: ${pokemonData.name}`);
-                    
-                    resolve({
-                        id, 
-                        name: pokemonData.name,
-                        spriteURL: pokemonData.sprites.front_default
-                    });
-                } catch (parseError) {
-                    console.error(`JSON parse error for Pokemon ${id}:`, parseError.message);
-                    const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
-                    const fallback = FALLBACK_POKEMON[fallbackIndex];
-                    console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
-                    resolve(fallback);
-                }
-            });
-        };
-        
-        makeRequest(true);
+        } catch (error) {
+            console.error(`Unexpected error for Pokemon ID ${id}:`, error.message);
+            const fallbackIndex = (id - 1) % FALLBACK_POKEMON.length;
+            const fallback = FALLBACK_POKEMON[fallbackIndex];
+            console.log(`Using fallback Pokemon for ID ${id}: ${fallback.name}`);
+            resolve(fallback);
+        }
     });
 };
 const generatePartyCode = () => {
@@ -486,63 +469,41 @@ app.listen(PORT, '0.0.0.0', () => {
     
     // Test PokeAPI connectivity
     console.log('Testing PokeAPI connectivity...');
-    const testConnectivity = (useHttps = true) => {
-        const url = useHttps ? 'https://pokeapi.co/api/v2/pokemon/1' : 'http://pokeapi.co/api/v2/pokemon/1';
-        console.log(`Testing ${useHttps ? 'HTTPS' : 'HTTP'} connectivity to: ${url}`);
+    const testConnectivity = () => {
+        const url = 'https://pokeapi.co/api/v2/pokemon/1';
+        console.log(`Testing connectivity to: ${url}`);
         
-        const testRequest = useHttps ? https.get(url, {
+        const testRequest = https.get(url, {
             headers: {
                 'User-Agent': 'Pokemon-Game-Server/1.0',
                 'Accept': 'application/json'
             },
-            timeout: 10000,
-            rejectUnauthorized: false
+            timeout: 15000,
+            rejectUnauthorized: false,
+            servername: 'pokeapi.co'
         }, (response) => {
             console.log('PokeAPI connectivity test - Status:', response.statusCode);
             if (response.statusCode === 200) {
                 console.log('✅ PokeAPI is accessible');
-            } else {
-                console.log('❌ PokeAPI returned error status:', response.statusCode);
-            }
-        }) : http.get(url, {
-            headers: {
-                'User-Agent': 'Pokemon-Game-Server/1.0',
-                'Accept': 'application/json'
-            },
-            timeout: 10000
-        }, (response) => {
-            console.log('PokeAPI connectivity test - Status:', response.statusCode);
-            if (response.statusCode === 200) {
-                console.log('✅ PokeAPI is accessible');
+            } else if (response.statusCode === 301 || response.statusCode === 302) {
+                console.log('✅ PokeAPI is accessible (redirect received)');
             } else {
                 console.log('❌ PokeAPI returned error status:', response.statusCode);
             }
         });
         
         testRequest.on('error', (error) => {
-            console.log(`❌ ${useHttps ? 'HTTPS' : 'HTTP'} connectivity test failed:`, error.message);
+            console.log(`❌ HTTPS connectivity test failed:`, error.message);
             console.log('Error code:', error.code);
-            
-            if (useHttps) {
-                console.log('Retrying with HTTP...');
-                testConnectivity(false);
-            } else {
-                console.log('Both HTTPS and HTTP failed, will use fallback Pokemon');
-            }
+            console.log('Will use fallback Pokemon for all requests');
         });
         
         testRequest.on('timeout', () => {
-            console.log(`❌ ${useHttps ? 'HTTPS' : 'HTTP'} connectivity test timed out`);
+            console.log(`❌ HTTPS connectivity test timed out`);
             testRequest.destroy();
-            
-            if (useHttps) {
-                console.log('Retrying with HTTP...');
-                testConnectivity(false);
-            } else {
-                console.log('Both HTTPS and HTTP timed out, will use fallback Pokemon');
-            }
+            console.log('Will use fallback Pokemon for all requests');
         });
     };
     
-    testConnectivity(true);
+    testConnectivity();
 }); 
