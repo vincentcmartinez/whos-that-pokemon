@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-const SERVER_URL = 'https://df0c133b871f.ngrok-free.app';
+const SERVER_URL = 'https://5bf8302d05f4.ngrok-free.app';
 
 export type Player = {
     id: string;
