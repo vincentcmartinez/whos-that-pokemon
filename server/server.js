@@ -334,6 +334,8 @@ app.post('/api/parties/:code/finish', (req, res) => {
                 tiedPlayers: tiedPlayers.length > 1 ? tiedPlayers : null
             };
             
+            console.log('Game finished - stored result:', party.gameResult);
+            
             res.json({
                 players: party.players,
                 allFinished: true,
@@ -397,6 +399,12 @@ app.get('/api/parties/:code/status', (req, res) => {
             return res.status(404).json({ error: 'Party not found' });
         }
 
+        console.log('Status endpoint response:', {
+            status: party.status,
+            players: party.players.map(p => ({ name: p.name, finished: p.finished, finalScore: p.finalScore })),
+            gameResult: party.gameResult
+        });
+        
         res.json({
             status: party.status,
             players: party.players,

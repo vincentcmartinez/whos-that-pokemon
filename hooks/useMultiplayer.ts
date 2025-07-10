@@ -78,19 +78,20 @@ export const useMultiplayer = () => {
             try {
                 const response = await fetch(`${SERVER_URL}/api/parties/${partyCode}/status`);
                 if (response.ok) {
-                    const data = await response.json();
-                    console.log('Polling update:', data);
-                    setState(prev => ({
-                        ...prev,
-                        party: {
-                            code: partyCode,
-                            status: data.status,
-                            players: data.players,
-                            pokemonList: prev.party?.pokemonList || [],
-                            gameStartTime: data.gameStartTime,
-                            gameResult: data.gameResult || null
-                        }
-                    }));
+                                    const data = await response.json();
+                console.log('Polling update:', data);
+                console.log('Game result from polling:', data.gameResult);
+                setState(prev => ({
+                    ...prev,
+                    party: {
+                        code: partyCode,
+                        status: data.status,
+                        players: data.players,
+                        pokemonList: prev.party?.pokemonList || [],
+                        gameStartTime: data.gameStartTime,
+                        gameResult: data.gameResult || null
+                    }
+                }));
                 }
             } catch (error) {
                 console.error('Polling error:', error);

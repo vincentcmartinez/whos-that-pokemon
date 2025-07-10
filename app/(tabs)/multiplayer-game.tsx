@@ -172,6 +172,8 @@ export default function MultiplayerGameScreen() {
     }
   }, [state.modalVisible, party, finishGame, gameFinished]);
 
+
+
   const startShake = () => {
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
@@ -357,6 +359,15 @@ export default function MultiplayerGameScreen() {
   const allPlayersFinished = party?.players?.every((p: any) => p.finished);
   const gameResult = party?.gameResult;
 
+  // Debug logging
+  console.log('MultiplayerGameScreen render:', {
+    modalVisible: state.modalVisible,
+    gameFinished,
+    allPlayersFinished,
+    gameResult,
+    players: party?.players?.map((p: any) => ({ name: p.name, finished: p.finished, finalScore: p.finalScore }))
+  });
+
   return (
     <LinearGradient
       colors={(theme === 'light' ? LIGHT_GRADIENT : DARK_GRADIENT) as [ColorValue, ColorValue]}
@@ -376,7 +387,7 @@ export default function MultiplayerGameScreen() {
         style={[styles.keyboardAvoidingView, { paddingTop: 40 }]}
       >
         <Modal 
-          visible={state.modalVisible}
+          visible={state.modalVisible || (gameFinished && allPlayersFinished)}
           transparent={true}
           animationType="fade"
         >
