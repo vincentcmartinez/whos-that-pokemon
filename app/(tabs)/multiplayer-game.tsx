@@ -1,6 +1,6 @@
 import { Stack, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { useCallback, useReducer, useRef, useState, useEffect } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View, Dimensions, KeyboardAvoidingView, Platform, ColorValue, Animated } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, TextInput, View, Dimensions, KeyboardAvoidingView, Platform, ColorValue, Animated, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -365,8 +365,8 @@ export default function MultiplayerGameScreen() {
       }} />
       
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         style={[styles.keyboardAvoidingView, { paddingTop: 40 }]}
       >
         <Modal 
@@ -429,7 +429,11 @@ export default function MultiplayerGameScreen() {
         </Modal>
 
         {!loading && gamePokemon.length > 0 && (
-          <>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.gameInfoContainer}>
               <View style={styles.infoRow}>
                 <View style={styles.infoItem}>
@@ -515,7 +519,7 @@ export default function MultiplayerGameScreen() {
                 </Pressable>
               </View>
             </View>
-          </>
+          </ScrollView>
         )}
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -528,6 +532,9 @@ const styles = StyleSheet.create({
   },
   keyboardAvoidingView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   centerContainer: {
     flex: 1,
@@ -596,6 +603,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   pokemonCard: {
     width: width * 0.7,
@@ -634,7 +642,8 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingBottom: 50,
+    paddingTop: 20,
   },
   input: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
